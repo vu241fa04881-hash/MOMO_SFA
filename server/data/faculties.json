@@ -1,0 +1,15 @@
+[
+  {
+    "id": "fac_53d95d61",
+    "facultyId": "FAC101",
+    "password": "Yash1822",
+    "name": "Yaswanth Chowdary Garapati",
+    "email": "garapati112006@gmail.com",
+    "department": "CSE",
+    "assignedRooms": [
+      "111222"
+    ],
+    "createdAt": "2026-09-18T17:58:07.101Z",
+    "isActive": true
+  }
+]

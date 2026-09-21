@@ -1,0 +1,11 @@
+[
+  {
+    "id": "admin_root",
+    "username": "admin",
+    "password": "Yash182206",
+    "name": "Main System Administrator",
+    "email": "",
+    "createdAt": "2026-09-18T15:27:54.891Z",
+    "isRoot": true
+  }
+]
