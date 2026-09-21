@@ -32,6 +32,7 @@ export default function AttendanceModal({
   const [searchTerm, setSearchTerm] = useState('');
   const [isExporting, setIsExporting] = useState(false);
   const [deletedIds, setDeletedIds] = useState(() => new Set());
+  const [clearingRoomLogs, setClearingRoomLogs] = useState(false);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -57,10 +58,10 @@ export default function AttendanceModal({
   }, [attendance, deletedIds]);
 
   const handleDeleteStudentLog = async (id, studentName) => {
-    const confirmDelete = window.confirm(
-      `Delete attendance log for ${studentName || 'this student'}?`
-    );
-    if (!confirmDelete) return;
+    // Optimistically update UI immediately
+    setDeletedIds(prev => new Set([...prev, id]));
+    if (onDeleteRecord) onDeleteRecord(id);
+    if (addToast) addToast(`Attendance log for ${studentName || 'student'} deleted`, 'success');
 
     try {
       const cleanCode = (roomCode || '').toString().trim().replace(/\s+/g, '');
@@ -69,11 +70,7 @@ export default function AttendanceModal({
         method: 'DELETE'
       });
       const data = await res.json();
-      if (data.success) {
-        setDeletedIds(prev => new Set([...prev, id]));
-        if (onDeleteRecord) onDeleteRecord(id);
-        if (addToast) addToast('Student attendance record deleted', 'success');
-      } else {
+      if (!data.success) {
         if (addToast) addToast(data.error || 'Failed to delete record', 'error');
       }
     } catch {
@@ -83,21 +80,24 @@ export default function AttendanceModal({
 
   const handleClearRoomAttendance = async () => {
     const cleanCode = (roomCode || '').toString().trim().replace(/\s+/g, '');
-    const confirmClear = window.confirm(
-      `Are you sure you want to delete ALL student attendance logs for Room ${cleanCode || roomCode}?\n\nThis action cannot be undone.`
-    );
-    if (!confirmClear) return;
+    if (!clearingRoomLogs) {
+      setClearingRoomLogs(true);
+      setTimeout(() => setClearingRoomLogs(false), 4000);
+      return;
+    }
+    setClearingRoomLogs(false);
+
+    // Optimistically clear UI immediately
+    setDeletedIds(new Set(studentAttendance.map(item => item.id)));
+    if (onClearRecords) onClearRecords();
+    if (addToast) addToast(`All student logs cleared for Room ${cleanCode || roomCode}`, 'success');
 
     try {
       const res = await fetch(`/api/room/${cleanCode}/attendance`, {
         method: 'DELETE'
       });
       const data = await res.json();
-      if (data.success) {
-        setDeletedIds(new Set(studentAttendance.map(item => item.id)));
-        if (onClearRecords) onClearRecords();
-        if (addToast) addToast(`All student logs cleared for Room ${cleanCode || roomCode}`, 'success');
-      } else {
+      if (!data.success) {
         if (addToast) addToast(data.error || 'Failed to clear logs', 'error');
       }
     } catch {
@@ -218,11 +218,15 @@ export default function AttendanceModal({
             <button
               onClick={handleClearRoomAttendance}
               disabled={studentAttendance.length === 0}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 disabled:opacity-40 text-xs font-semibold shadow-inner transition-all active:scale-95 cursor-pointer"
-              title="Delete all student attendance logs for this room"
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold shadow-inner transition-all active:scale-95 cursor-pointer ${
+                clearingRoomLogs
+                  ? 'bg-rose-600 text-white border border-rose-500 animate-pulse shadow-lg shadow-rose-500/30'
+                  : 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 disabled:opacity-40'
+              }`}
+              title={clearingRoomLogs ? 'Click again to confirm clearing all logs' : 'Delete all student attendance logs for this room'}
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Clear Room Logs</span>
+              <span className="hidden sm:inline">{clearingRoomLogs ? 'Confirm Clear All?' : 'Clear Room Logs'}</span>
             </button>
 
             {/* Download Excel Button */}

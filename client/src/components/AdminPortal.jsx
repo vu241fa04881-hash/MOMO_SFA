@@ -60,6 +60,7 @@ export default function AdminPortal({
   const [superAdmins, setSuperAdmins] = useState([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [clearingFacultyLogs, setClearingFacultyLogs] = useState(false);
 
   // Modals
   const [isAddFacultyOpen, setIsAddFacultyOpen] = useState(false);
@@ -358,47 +359,50 @@ export default function AdminPortal({
 
   // Handle Delete Single Attendance Record (Faculty Login Log)
   const handleDeleteAttendanceRecord = async (id, facultyName, roomCode) => {
-    const confirmDelete = window.confirm(
-      `Delete login record for ${facultyName || 'Faculty'} (Room: ${roomCode})?`
-    );
-    if (!confirmDelete) return;
+    // Optimistically update UI immediately
+    setGlobalAttendance(prev => prev.filter(item => item.id !== id));
+    if (addToast) addToast(`Login record deleted (${facultyName || 'Faculty'})`, 'success');
 
     try {
-      const res = await fetch(`/api/admin/attendance/${id}`, {
+      const res = await fetch(`/api/attendance/${id}`, {
         method: 'DELETE'
       });
       const data = await res.json();
-      if (data.success) {
-        setGlobalAttendance(prev => prev.filter(item => item.id !== id));
-        if (addToast) addToast('Faculty login record deleted', 'success');
-      } else {
+      if (!data.success) {
         if (addToast) addToast(data.error || 'Failed to delete record', 'error');
+        loadAdminData(); // re-sync if failed
       }
     } catch {
       if (addToast) addToast('Server error deleting login record', 'error');
+      loadAdminData();
     }
   };
 
-  // Handle Clear All Faculty Attendance Records
+  // Handle Clear All Faculty Attendance Records (Inline 2-step confirmation)
   const handleClearAllFacultyAttendance = async () => {
-    const confirmClear = window.confirm(
-      'Are you sure you want to delete ALL faculty login logs?\n\nThis action cannot be undone.'
-    );
-    if (!confirmClear) return;
+    if (!clearingFacultyLogs) {
+      setClearingFacultyLogs(true);
+      setTimeout(() => setClearingFacultyLogs(false), 4000);
+      return;
+    }
+    setClearingFacultyLogs(false);
+
+    // Optimistically clear UI immediately
+    setGlobalAttendance([]);
+    if (addToast) addToast('All faculty login logs cleared successfully', 'success');
 
     try {
       const res = await fetch('/api/admin/attendance', {
         method: 'DELETE'
       });
       const data = await res.json();
-      if (data.success) {
-        setGlobalAttendance([]);
-        if (addToast) addToast('All faculty login logs cleared successfully', 'success');
-      } else {
+      if (!data.success) {
         if (addToast) addToast(data.error || 'Failed to clear logs', 'error');
+        loadAdminData();
       }
     } catch {
       if (addToast) addToast('Server error clearing login logs', 'error');
+      loadAdminData();
     }
   };
 
@@ -780,11 +784,15 @@ export default function AdminPortal({
               <button
                 onClick={handleClearAllFacultyAttendance}
                 disabled={facultyAttendance.length === 0}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 disabled:opacity-40 text-xs font-bold transition-all active:scale-95 cursor-pointer"
-                title="Delete all faculty login logs"
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer ${
+                  clearingFacultyLogs
+                    ? 'bg-rose-600 text-white border border-rose-500 animate-pulse shadow-lg shadow-rose-500/30'
+                    : 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 disabled:opacity-40'
+                }`}
+                title={clearingFacultyLogs ? 'Click again to confirm clearing all logs' : 'Delete all faculty login logs'}
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>Clear All Logs</span>
+                <span>{clearingFacultyLogs ? 'Confirm Clear All?' : 'Clear All Logs'}</span>
               </button>
 
               <a
