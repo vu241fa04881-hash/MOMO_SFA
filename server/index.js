@@ -2647,9 +2647,14 @@ io.on('connection', (socket) => {
   });
 });
 
-// Serve frontend in production
-const CLIENT_DIST = path.join(__dirname, '..', 'client', 'dist');
-if (fs.existsSync(CLIENT_DIST)) {
+// Serve frontend in production (works across both local build and Render deployments)
+const possibleDistPaths = [
+  path.join(__dirname, '..', 'client', 'dist'),
+  path.join(__dirname, '..', 'dist'),
+  path.join(__dirname, 'dist')
+];
+const CLIENT_DIST = possibleDistPaths.find(p => fs.existsSync(p));
+if (CLIENT_DIST) {
   app.use(express.static(CLIENT_DIST));
   app.get('*', (req, res) => {
     res.sendFile(path.join(CLIENT_DIST, 'index.html'));

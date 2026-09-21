@@ -106,5 +106,23 @@
     "exitedAt": "2026-09-21T16:28:12.654Z",
     "duration": "5s",
     "status": "Exited"
+  },
+  {
+    "id": "e92d0d79-b946-4507-8af8-63965ccffd01",
+    "roomCode": "111222",
+    "roomName": "CSE - Yaswanth Chowdary Garapati",
+    "hostName": "Yaswanth Chowdary Garapati",
+    "senderId": "client_xmssarl",
+    "socketId": "sn99YIpszvjXbZKdAAAO",
+    "name": "Yaswanth Chowdary Garapati",
+    "rollNumber": "FAC101",
+    "email": "garapati112006@gmail.com",
+    "mobile": "N/A",
+    "role": "Faculty (Host)",
+    "isHost": true,
+    "joinedAt": "2026-09-21T17:21:40.815Z",
+    "exitedAt": "2026-09-21T17:22:48.373Z",
+    "duration": "1m 8s",
+    "status": "Exited"
   }
 ]

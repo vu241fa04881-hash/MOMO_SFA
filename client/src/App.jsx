@@ -59,18 +59,36 @@ const DEFAULT_NAME = 'Device ' + CLIENT_ID.slice(-3).toUpperCase();
 
 export default function App() {
   // 3-Portal Route Resolution (Student default, Faculty / Admin isolated)
+  const isInternalHashChangeRef = useRef(false);
+
   const getPortalFromHash = () => {
     const hash = (window.location.hash || '').toLowerCase();
     if (hash.includes('admin')) return 'admin';
     if (hash.includes('faculty')) return 'faculty';
+    if (hash.includes('student')) return 'student';
+
+    // If hash does not specify portal (e.g. #code=111222), retain saved or active portal
+    const saved = sessionStorage.getItem('momo_active_portal');
+    if (saved === 'faculty' || saved === 'admin') return saved;
     return 'student'; // Default portal for student access
   };
 
   const [activePortal, setActivePortal] = useState(getPortalFromHash);
+  const activePortalRef = useRef(activePortal);
+
+  useEffect(() => {
+    activePortalRef.current = activePortal;
+    sessionStorage.setItem('momo_active_portal', activePortal);
+  }, [activePortal]);
 
   useEffect(() => {
     const handleHashChange = () => {
-      setActivePortal(getPortalFromHash());
+      if (isInternalHashChangeRef.current) {
+        return;
+      }
+      const nextPortal = getPortalFromHash();
+      setActivePortal(nextPortal);
+      activePortalRef.current = nextPortal;
     };
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
@@ -168,7 +186,6 @@ export default function App() {
   const userRollNumberRef = useRef(userRollNumber);
   const userEmailRef = useRef(userEmail);
   const userMobileRef = useRef(userMobile);
-  const isInternalHashChangeRef = useRef(false);
 
   useEffect(() => {
     roomCodeRef.current = roomCode;
@@ -242,11 +259,22 @@ export default function App() {
     addToast(nextMuted ? 'Sound muted' : 'Sound enabled', 'info');
   };
 
-  // Parse room code from URL hash (e.g. #code=549201 or #room=fast-blue-falcon)
+  // Helper to build the correct hash that always retains the active portal
+  const buildPortalHash = useCallback((code, portal = activePortalRef.current) => {
+    if (portal === 'faculty') {
+      return code ? `#portal=faculty&code=${code}` : '#portal=faculty';
+    }
+    if (portal === 'admin') {
+      return code ? `#portal=admin&code=${code}` : '#portal=admin';
+    }
+    return code ? `#code=${code}` : '#portal=student';
+  }, []);
+
+  // Parse room code from URL hash (e.g. #code=549201, #portal=faculty&code=549201, or #room=fast-blue-falcon)
   const getCodeFromUrl = () => {
     const hash = window.location.hash;
     if (hash) {
-      const match = hash.match(/#(?:code|room)=([^&]+)/i);
+      const match = hash.match(/[#&](?:code|room)=([^&]+)/i);
       if (match && match[1]) {
         return decodeURIComponent(match[1]);
       }
@@ -506,7 +534,17 @@ export default function App() {
       const urlCode = getCodeFromUrl();
       if (urlCode) {
         const clean = urlCode.toString().trim().toLowerCase().replace(/\s+/g, '');
-        if (userRollNumberRef.current && userNameRef.current && userNameRef.current !== DEFAULT_NAME) {
+        if (activePortalRef.current === 'faculty' && facultyUser) {
+          socket.emit('join-room', {
+            roomCode: clean,
+            peerName: facultyUser.name,
+            rollNumber: facultyUser.facultyId,
+            email: facultyUser.email || '',
+            role: 'faculty',
+            facultyId: facultyUser.facultyId,
+            senderId: CLIENT_ID
+          });
+        } else if (userRollNumberRef.current && userNameRef.current && userNameRef.current !== DEFAULT_NAME) {
           socket.emit('join-room', {
             roomCode: clean,
             peerName: userNameRef.current,
@@ -606,7 +644,7 @@ export default function App() {
       }
 
       // Update URL hash safely without triggering infinite hashchange loop
-      const targetHash = `#code=${data.code}`;
+      const targetHash = buildPortalHash(data.code, activePortalRef.current);
       if (window.location.hash !== targetHash) {
         isInternalHashChangeRef.current = true;
         window.location.hash = targetHash;
@@ -631,7 +669,7 @@ export default function App() {
         setFormattedCode(data.formattedCode || data.newCode);
         roomCodeRef.current = data.newCode;
         if (data.roomName) setRoomName(data.roomName);
-        const targetHash = `#code=${data.newCode}`;
+        const targetHash = buildPortalHash(data.newCode, activePortalRef.current);
         if (window.location.hash !== targetHash) {
           isInternalHashChangeRef.current = true;
           window.location.hash = targetHash;
@@ -700,7 +738,7 @@ export default function App() {
       setTtlMinutes(15);
       roomCodeRef.current = data.code;
 
-      const targetHash = `#code=${data.code}`;
+      const targetHash = buildPortalHash(data.code, activePortalRef.current);
       if (window.location.hash !== targetHash) {
         isInternalHashChangeRef.current = true;
         window.location.hash = targetHash;
@@ -752,7 +790,17 @@ export default function App() {
       const newCode = getCodeFromUrl();
       if (newCode && newCode !== roomCodeRef.current) {
         const clean = newCode.toString().trim().toLowerCase().replace(/\s+/g, '');
-        if (userRollNumberRef.current && userNameRef.current && userNameRef.current !== DEFAULT_NAME) {
+        if (activePortalRef.current === 'faculty' && facultyUser) {
+          socket.emit('join-room', {
+            roomCode: clean,
+            peerName: facultyUser.name,
+            rollNumber: facultyUser.facultyId,
+            email: facultyUser.email || '',
+            role: 'faculty',
+            facultyId: facultyUser.facultyId,
+            senderId: CLIENT_ID
+          });
+        } else if (userRollNumberRef.current && userNameRef.current && userNameRef.current !== DEFAULT_NAME) {
           socket.emit('join-room', {
             roomCode: clean,
             peerName: userNameRef.current,
@@ -1197,7 +1245,15 @@ export default function App() {
           addToast={addToast}
           onLaunchRoom={(code) => {
             setActivePortal('faculty');
-            window.location.hash = '#portal=faculty';
+            activePortalRef.current = 'faculty';
+            sessionStorage.setItem('momo_active_portal', 'faculty');
+            const targetHash = `#portal=faculty&code=${code}`;
+            if (window.location.hash !== targetHash) {
+              isInternalHashChangeRef.current = true;
+              window.location.hash = targetHash;
+            }
+            setRoomCode(code);
+            roomCodeRef.current = code;
             joinRoom(code, {
               name: facultyUser ? facultyUser.name : 'Faculty Host',
               role: 'faculty',
@@ -1215,6 +1271,16 @@ export default function App() {
           onFacultyLogout={handleFacultyLogout}
           onLaunchClassroom={(code) => {
             if (code) {
+              setActivePortal('faculty');
+              activePortalRef.current = 'faculty';
+              sessionStorage.setItem('momo_active_portal', 'faculty');
+              const targetHash = `#portal=faculty&code=${code}`;
+              if (window.location.hash !== targetHash) {
+                isInternalHashChangeRef.current = true;
+                window.location.hash = targetHash;
+              }
+              setRoomCode(code);
+              roomCodeRef.current = code;
               joinRoom(code, {
                 name: facultyUser.name,
                 email: facultyUser.email,
@@ -1228,6 +1294,8 @@ export default function App() {
               }
               setRoomCode('');
               roomCodeRef.current = '';
+              isInternalHashChangeRef.current = true;
+              window.location.hash = '#portal=faculty';
             }
           }}
           onViewRoomAttendance={handleViewRoomAttendance}
