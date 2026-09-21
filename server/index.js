@@ -213,6 +213,107 @@ function normalizeCode(code) {
   return code.toString().trim().toLowerCase().replace(/\s+/g, '');
 }
 
+// Student 72-Hour Admission Persistence: key -> admissionRecord
+// Key format: `${normalizedRoomCode}:${senderId}`
+// Value: { roomCode, senderId, rollNumber, peerName, admittedAt, expiresAt }
+const ADMISSIONS_FILE = path.join(__dirname, '..', 'server', 'data', 'student_admissions.json');
+const studentAdmissionsStore = new Map();
+const ADMISSION_DURATION_MS = 72 * 60 * 60 * 1000; // 72 hours
+
+function saveAdmissionsToFile() {
+  try {
+    const list = Array.from(studentAdmissionsStore.values());
+    fs.writeFileSync(ADMISSIONS_FILE, JSON.stringify(list, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to save student admissions to file:', err);
+  }
+}
+
+function loadAdmissionsFromFile() {
+  try {
+    if (fs.existsSync(ADMISSIONS_FILE)) {
+      const data = fs.readFileSync(ADMISSIONS_FILE, 'utf-8');
+      const list = JSON.parse(data);
+      if (Array.isArray(list)) {
+        studentAdmissionsStore.clear();
+        const now = Date.now();
+        for (const item of list) {
+          if (item && item.expiresAt && item.expiresAt > now) {
+            const key = `${normalizeCode(item.roomCode)}:${item.senderId}`;
+            studentAdmissionsStore.set(key, item);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Failed to load student admissions from file:', err);
+  }
+}
+
+loadAdmissionsFromFile();
+
+// Check if student has a valid, unexpired 72-hour admission for this room, device, and exact student identity
+function checkStudentAdmission({ roomCode, senderId, rollNumber, peerName }) {
+  if (!roomCode || !senderId) return false;
+  const normRoom = normalizeCode(roomCode);
+  const key = `${normRoom}:${senderId}`;
+  const record = studentAdmissionsStore.get(key);
+  if (!record) return false;
+
+  // Check 72-hour expiration
+  if (Date.now() > record.expiresAt) {
+    studentAdmissionsStore.delete(key);
+    saveAdmissionsToFile();
+    return false;
+  }
+
+  // Must match exact Student ID / roll number that faculty approved
+  const normReqRoll = (rollNumber || '').toString().trim().toUpperCase();
+  const normRecRoll = (record.rollNumber || '').toString().trim().toUpperCase();
+  if (normReqRoll && normRecRoll && normReqRoll !== normRecRoll) {
+    // Student ID changed on same device -> must ask faculty permission!
+    return false;
+  }
+
+  // Must match exact student name that faculty approved
+  const normReqName = (peerName || '').toString().trim().toLowerCase();
+  const normRecName = (record.peerName || '').toString().trim().toLowerCase();
+  if (normReqName && normRecName && normReqName !== normRecName) {
+    // Student name changed on same device -> must ask faculty permission!
+    return false;
+  }
+
+  return true;
+}
+
+// Grant 72-hour student admission when faculty admits student
+function grantStudentAdmission({ roomCode, senderId, rollNumber, peerName }) {
+  if (!roomCode || !senderId) return;
+  const normRoom = normalizeCode(roomCode);
+  const key = `${normRoom}:${senderId}`;
+  const record = {
+    roomCode: normRoom,
+    senderId,
+    rollNumber: (rollNumber || '').toString().trim().toUpperCase(),
+    peerName: (peerName || '').toString().trim(),
+    admittedAt: Date.now(),
+    expiresAt: Date.now() + ADMISSION_DURATION_MS
+  };
+  studentAdmissionsStore.set(key, record);
+  saveAdmissionsToFile();
+}
+
+// Revoke student admission (e.g. if faculty kicks or denies student)
+function revokeStudentAdmission(roomCode, senderId) {
+  if (!roomCode || !senderId) return;
+  const normRoom = normalizeCode(roomCode);
+  const key = `${normRoom}:${senderId}`;
+  if (studentAdmissionsStore.has(key)) {
+    studentAdmissionsStore.delete(key);
+    saveAdmissionsToFile();
+  }
+}
+
 function getOrCreateRoom(codeOrSlug, creatorId = null, creatorName = 'User 1', roomLabel = '') {
   const normalized = normalizeCode(codeOrSlug);
 
@@ -1941,7 +2042,18 @@ io.on('connection', (socket) => {
       room.admittedClients.add(room.hostClientId);
     }
 
-    const isAdmitted = isHost || (senderId && room.admittedClients.has(senderId));
+    // Check 72-hour student admission:
+    // If student changed their ID (roll number) or Name on the same device,
+    // checkStudentAdmission returns false and faculty MUST approve the new identity.
+    // If faculty approved this student ID and Name within the last 72 hours, they enter directly.
+    const isStudentAdmitted = !isHost && checkStudentAdmission({
+      roomCode: normalized,
+      senderId,
+      rollNumber,
+      peerName
+    });
+
+    const isAdmitted = isHost || isStudentAdmitted;
 
     // If admitted (either Faculty Host or previously approved Student)
     if (isAdmitted) {
@@ -2080,6 +2192,12 @@ io.on('connection', (socket) => {
     room.waitingPeers.delete(targetSocketId);
     if (waitingPeer.senderId) {
       room.admittedClients.add(waitingPeer.senderId);
+      grantStudentAdmission({
+        roomCode: normalized,
+        senderId: waitingPeer.senderId,
+        rollNumber: waitingPeer.rollNumber,
+        peerName: waitingPeer.peerName
+      });
     }
 
     const targetSocket = io.sockets.sockets.get(targetSocketId);
@@ -2157,6 +2275,9 @@ io.on('connection', (socket) => {
     const waitingPeer = room.waitingPeers.get(targetSocketId);
     if (waitingPeer) {
       room.waitingPeers.delete(targetSocketId);
+      if (waitingPeer.senderId) {
+        revokeStudentAdmission(room.code, waitingPeer.senderId);
+      }
       const targetSocket = io.sockets.sockets.get(targetSocketId);
       if (targetSocket) {
         targetSocket.emit('access-denied', {
@@ -2186,6 +2307,12 @@ io.on('connection', (socket) => {
     for (const waitingPeer of waitingList) {
       if (waitingPeer.senderId) {
         room.admittedClients.add(waitingPeer.senderId);
+        grantStudentAdmission({
+          roomCode: normalized,
+          senderId: waitingPeer.senderId,
+          rollNumber: waitingPeer.rollNumber,
+          peerName: waitingPeer.peerName
+        });
       }
       const targetSocket = io.sockets.sockets.get(waitingPeer.socketId);
       if (targetSocket) {
@@ -2260,6 +2387,7 @@ io.on('connection', (socket) => {
     const removedPeer = room.peers.get(targetSocketId);
     if (removedPeer && removedPeer.senderId) {
       room.admittedClients.delete(removedPeer.senderId);
+      revokeStudentAdmission(room.code, removedPeer.senderId);
     }
     room.peers.delete(targetSocketId);
     recordExit(room, targetSocketId);

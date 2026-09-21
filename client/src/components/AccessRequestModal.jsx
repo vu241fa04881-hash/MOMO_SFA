@@ -99,7 +99,7 @@ export default function AccessRequestModal({
                     <Icon className="w-5 h-5" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="text-sm font-semibold text-white truncate max-w-[140px] sm:max-w-[200px]">
                         {req.peerName || 'Student'}
                       </h4>
@@ -108,6 +108,9 @@ export default function AccessRequestModal({
                           {req.rollNumber}
                         </span>
                       )}
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">
+                        72h Access
+                      </span>
                     </div>
                     <div className="flex flex-col gap-0.5 mt-0.5 text-[11px] text-slate-400 font-mono">
                       {req.email && req.email !== 'N/A' && (
