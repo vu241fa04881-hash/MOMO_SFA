@@ -1111,7 +1111,7 @@ export default function App() {
             </div>
             <h3 className="text-xl font-bold text-white mb-1">Classroom space is ready</h3>
             <p className="text-slate-400 text-sm max-w-md mb-6">
-              Drag and drop lecture slides or materials, press <kbd className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-xs border border-white/10">Ctrl+V</kbd> to paste code, or scan the QR code to connect from mobile.
+              Drag and drop lecture slides or materials, press <kbd className="px-1.5 py-0.5 rounded font-mono text-xs border">Ctrl+V</kbd> to paste code, or scan the QR code to connect from mobile.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <button

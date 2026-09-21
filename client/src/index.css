@@ -147,40 +147,172 @@
 .light-theme .text-slate-500 { color: #64748b !important; }
 .light-theme .text-white { color: #0f172a !important; }
 
-.light-theme .bg-slate-900 {
-  background-color: rgba(241, 245, 249, 0.88) !important;
+/* Light Theme Badges & Accent Colors - High Contrast */
+.light-theme .text-cyan-300,
+.light-theme .text-cyan-400 {
+  color: #0284c7 !important; /* Deep Sky Blue */
+}
+.light-theme .text-amber-300,
+.light-theme .text-amber-400 {
+  color: #b45309 !important; /* Deep Amber */
+}
+.light-theme .text-emerald-300,
+.light-theme .text-emerald-400 {
+  color: #047857 !important; /* Deep Emerald */
+}
+.light-theme .text-rose-300,
+.light-theme .text-rose-400 {
+  color: #be123c !important; /* Deep Rose */
+}
+.light-theme .text-indigo-300,
+.light-theme .text-indigo-400 {
+  color: #4338ca !important; /* Deep Indigo */
+}
+.light-theme .text-purple-300,
+.light-theme .text-purple-400 {
+  color: #6b21a8 !important; /* Deep Purple */
+}
+
+/* Light Mode Badge Tint Backgrounds */
+.light-theme .bg-cyan-500\/10,
+.light-theme .bg-cyan-500\/15,
+.light-theme .bg-cyan-500\/20 {
+  background-color: rgba(2, 132, 199, 0.12) !important;
+  border-color: rgba(2, 132, 199, 0.3) !important;
+}
+
+.light-theme .bg-amber-400\/10,
+.light-theme .bg-amber-400\/20,
+.light-theme .bg-amber-500\/10,
+.light-theme .bg-amber-500\/20 {
+  background-color: rgba(217, 119, 6, 0.12) !important;
+  border-color: rgba(217, 119, 6, 0.3) !important;
+}
+
+.light-theme .bg-emerald-500\/10,
+.light-theme .bg-emerald-500\/20 {
+  background-color: rgba(4, 120, 87, 0.12) !important;
+  border-color: rgba(4, 120, 87, 0.3) !important;
+}
+
+.light-theme .bg-rose-500\/10,
+.light-theme .bg-rose-500\/15,
+.light-theme .bg-rose-500\/20,
+.light-theme .bg-rose-500\/25 {
+  background-color: rgba(190, 18, 60, 0.12) !important;
+  border-color: rgba(190, 18, 60, 0.3) !important;
+}
+
+/* Light Theme Slate Backgrounds */
+.light-theme .bg-slate-900,
+.light-theme .bg-slate-900\/90,
+.light-theme .bg-slate-900\/80,
+.light-theme .bg-slate-900\/70,
+.light-theme .bg-slate-900\/60,
+.light-theme .bg-slate-900\/50,
+.light-theme .bg-slate-900\/40 {
+  background-color: rgba(241, 245, 249, 0.92) !important;
   color: #0f172a !important;
   border-color: rgba(0, 0, 0, 0.08) !important;
 }
 
-.light-theme .bg-slate-900\/80 {
-  background-color: rgba(241, 245, 249, 0.85) !important;
+.light-theme .bg-slate-800,
+.light-theme .bg-slate-800\/90,
+.light-theme .bg-slate-800\/80,
+.light-theme .bg-slate-800\/70,
+.light-theme .bg-slate-800\/60,
+.light-theme .bg-slate-800\/50 {
+  background-color: #e2e8f0 !important;
   color: #0f172a !important;
-  border-color: rgba(0, 0, 0, 0.08) !important;
-}
-
-.light-theme .bg-slate-900\/60 {
-  background-color: rgba(241, 245, 249, 0.75) !important;
-  color: #0f172a !important;
-  border-color: rgba(0, 0, 0, 0.06) !important;
-}
-
-.light-theme .bg-slate-800\/80 {
-  background-color: rgba(255, 255, 255, 0.9) !important;
-  color: #0f172a !important;
-  border-color: rgba(0, 0, 0, 0.08) !important;
-}
-
-.light-theme .bg-slate-800\/60 {
-  background-color: rgba(255, 255, 255, 0.85) !important;
-  color: #0f172a !important;
-  border-color: rgba(0, 0, 0, 0.08) !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
 }
 
 .light-theme .bg-slate-950 {
   background-color: rgba(248, 250, 252, 0.95) !important;
   color: #0f172a !important;
   border-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Light theme tab bar button hover/inactive text */
+.light-theme .bg-slate-900\/90 button:not([class*="bg-gradient"]),
+.light-theme .bg-slate-900\/80 button:not([class*="bg-gradient"]) {
+  color: #475569 !important;
+}
+.light-theme .bg-slate-900\/90 button:not([class*="bg-gradient"]):hover,
+.light-theme .bg-slate-900\/80 button:not([class*="bg-gradient"]):hover {
+  color: #0f172a !important;
+  background-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Light theme table headers and rows */
+.light-theme table thead tr,
+.light-theme table thead th,
+.light-theme thead tr,
+.light-theme th {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+  font-weight: 700 !important;
+}
+
+.light-theme table tbody tr {
+  border-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+.light-theme table tbody tr:hover {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+
+/* Universal Keycaps (<kbd>) */
+kbd {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.75rem;
+  border-radius: 0.375rem;
+  line-height: 1.2;
+}
+
+:root:not(.light-theme) kbd {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.light-theme kbd {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* Code Snippet Viewer - ALWAYS Dark IDE Theme for High Contrast Syntax Highlighting */
+.code-viewer-container {
+  background-color: #0d1117 !important;
+  border: 1px solid #30363d !important;
+}
+
+.code-viewer-container pre {
+  background-color: transparent !important;
+}
+
+.code-viewer-container code {
+  background-color: transparent !important;
+  color: #e6edf3 !important;
+}
+
+/* Code Editor Textarea in CodeModal - ALWAYS Dark IDE Theme */
+.code-editor-textarea {
+  background-color: #0d1117 !important;
+  color: #38bdf8 !important;
+  border-color: #30363d !important;
+}
+.code-editor-textarea::placeholder {
+  color: #64748b !important;
 }
 
 .light-theme .bg-white\/5 {
@@ -202,16 +334,16 @@
   border-color: rgba(0, 0, 0, 0.06) !important;
 }
 
-.light-theme input,
-.light-theme textarea,
+.light-theme input:not(.code-editor-textarea),
+.light-theme textarea:not(.code-editor-textarea),
 .light-theme select {
   background-color: rgba(255, 255, 255, 0.92) !important;
   color: #0f172a !important;
   border-color: rgba(0, 0, 0, 0.14) !important;
 }
 
-.light-theme input::placeholder,
-.light-theme textarea::placeholder {
+.light-theme input:not(.code-editor-textarea)::placeholder,
+.light-theme textarea:not(.code-editor-textarea)::placeholder {
   color: #94a3b8 !important;
 }
 

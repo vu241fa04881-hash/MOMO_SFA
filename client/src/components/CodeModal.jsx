@@ -110,7 +110,7 @@ export default function CodeModal({ isOpen, onClose, onSendCode }) {
               placeholder="Paste or type code snippet here..."
               rows={10}
               required
-              className="w-full p-3.5 rounded-xl bg-slate-950 font-mono text-xs sm:text-sm text-cyan-300 border border-white/10 focus:outline-none focus:border-cyan-400 transition-colors resize-none leading-relaxed"
+              className="w-full p-3.5 rounded-xl bg-[#0d1117] font-mono text-xs sm:text-sm text-cyan-300 border border-slate-700 focus:outline-none focus:border-cyan-400 transition-colors resize-none leading-relaxed code-editor-textarea"
             />
           </div>
 

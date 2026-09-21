@@ -702,8 +702,8 @@ export default function AdminPortal({
             onClick={() => setActiveTab('faculty')}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'faculty'
-                ? 'bg-gradient-to-r from-amber-500 to-rose-600 text-slate-950 shadow-md shadow-amber-500/20'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-gradient-to-r from-amber-500 to-rose-600 text-white shadow-md shadow-amber-500/20'
+                : 'text-slate-400 hover:text-white light-tab-inactive'
             }`}
           >
             <Users className="w-4 h-4" />
@@ -714,8 +714,8 @@ export default function AdminPortal({
             onClick={() => setActiveTab('rooms')}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'rooms'
-                ? 'bg-gradient-to-r from-amber-500 to-rose-600 text-slate-950 shadow-md shadow-amber-500/20'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-gradient-to-r from-amber-500 to-rose-600 text-white shadow-md shadow-amber-500/20'
+                : 'text-slate-400 hover:text-white light-tab-inactive'
             }`}
           >
             <DoorOpen className="w-4 h-4" />
@@ -726,8 +726,8 @@ export default function AdminPortal({
             onClick={() => setActiveTab('attendance')}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'attendance'
-                ? 'bg-gradient-to-r from-amber-500 to-rose-600 text-slate-950 shadow-md shadow-amber-500/20'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-gradient-to-r from-amber-500 to-rose-600 text-white shadow-md shadow-amber-500/20'
+                : 'text-slate-400 hover:text-white light-tab-inactive'
             }`}
           >
             <FileSpreadsheet className="w-4 h-4" />
@@ -738,8 +738,8 @@ export default function AdminPortal({
             onClick={() => setActiveTab('admins')}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'admins'
-                ? 'bg-gradient-to-r from-amber-500 to-rose-600 text-slate-950 shadow-md shadow-amber-500/20'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-gradient-to-r from-amber-500 to-rose-600 text-white shadow-md shadow-amber-500/20'
+                : 'text-slate-400 hover:text-white light-tab-inactive'
             }`}
           >
             <ShieldCheck className="w-4 h-4" />

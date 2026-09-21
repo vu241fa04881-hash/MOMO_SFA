@@ -177,9 +177,9 @@ export default function ItemCard({ item, currentClientId, onOpenImageModal, addT
               </span>
             </div>
 
-            <div className="relative rounded-xl overflow-hidden bg-slate-950 border border-white/10 max-h-64 overflow-y-auto">
+            <div className="code-viewer-container relative rounded-xl overflow-hidden bg-[#0d1117] border border-slate-700/60 max-h-64 overflow-y-auto">
               <pre className="!bg-transparent !m-0 !p-3 text-xs">
-                <code ref={codeRef} className={`language-${item.payload.language || 'javascript'}`}>
+                <code ref={codeRef} className={`language-${item.payload.language || 'javascript'} !text-[#e6edf3]`}>
                   {item.payload.code}
                 </code>
               </pre>

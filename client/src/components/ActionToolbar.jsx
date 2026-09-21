@@ -104,9 +104,9 @@ export default function ActionToolbar({
         <div className="hidden md:flex items-center gap-2 text-xs text-slate-400 bg-slate-900/60 px-3.5 py-2 rounded-xl border border-white/5">
           <Clipboard className="w-3.5 h-3.5 text-cyan-400" />
           <span>Press</span>
-          <kbd className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200 font-mono text-[11px] border border-white/10">Ctrl</kbd>
+          <kbd className="px-1.5 py-0.5 rounded font-mono text-[11px] border">Ctrl</kbd>
           <span>+</span>
-          <kbd className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200 font-mono text-[11px] border border-white/10">V</kbd>
+          <kbd className="px-1.5 py-0.5 rounded font-mono text-[11px] border">V</kbd>
           <span>to paste images or text directly</span>
         </div>
       </div>

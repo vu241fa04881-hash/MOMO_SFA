@@ -2365,7 +2365,9 @@ io.on('connection', (socket) => {
 
     room.items.unshift(item);
     room.lastActivity = Date.now();
-    io.to(normalizeCode(room.code)).emit('item-added', item);
+    const cleanRoom = normalizeCode(room.code);
+    socket.join(cleanRoom);
+    io.to(cleanRoom).emit('item-added', item);
   });
 
   // Code snippet broadcast
@@ -2388,7 +2390,9 @@ io.on('connection', (socket) => {
 
     room.items.unshift(item);
     room.lastActivity = Date.now();
-    io.to(normalizeCode(room.code)).emit('item-added', item);
+    const cleanRoom = normalizeCode(room.code);
+    socket.join(cleanRoom);
+    io.to(cleanRoom).emit('item-added', item);
   });
 
   // Peer activity indicator (dragover, typing)
