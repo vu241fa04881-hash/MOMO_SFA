@@ -35,7 +35,7 @@ export default function ConnectedDevicesModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-md rounded-3xl glass-panel p-6 shadow-2xl border border-white/10 flex flex-col gap-4"
+        className="relative w-full max-w-lg rounded-3xl glass-panel p-6 shadow-2xl border border-white/10 flex flex-col gap-4"
       >
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-white/10">
@@ -67,13 +67,13 @@ export default function ConnectedDevicesModal({
             return (
               <div
                 key={peer.socketId || idx}
-                className={`flex items-center justify-between p-3.5 rounded-2xl border transition-all ${
+                className={`flex items-center justify-between gap-3 p-3.5 rounded-2xl border transition-all ${
                   isSelf
                     ? 'bg-cyan-500/10 border-cyan-500/30'
                     : 'bg-slate-900/60 border-white/5'
                 }`}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div
                     className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
                       isSelf
@@ -83,34 +83,34 @@ export default function ConnectedDevicesModal({
                   >
                     <Icon className="w-5 h-5" />
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-white truncate max-w-[170px]">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-semibold text-white truncate max-w-[170px] sm:max-w-[220px]" title={peer.peerName || 'Device'}>
                         {peer.peerName || 'Device'}
                       </span>
                       {peer.isHost && (
-                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1 shrink-0">
                           <Crown className="w-3 h-3 text-amber-400" />
                           <span>Host</span>
                         </span>
                       )}
                       {isSelf && (
-                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 shrink-0">
                           This Device
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                      <span className="text-[11px] text-emerald-400 font-medium">Online & Synced</span>
+                    <div className="flex items-center gap-2 mt-1 text-[11px] flex-wrap">
+                      <span className="flex items-center gap-1.5 text-emerald-400 font-medium shrink-0">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <span>Online & Synced</span>
+                      </span>
+                      <span className="text-slate-600">•</span>
+                      <span className="text-slate-400 font-mono">
+                        {peer.isHost ? 'Room Creator' : (isSelf ? 'Sender / Receiver' : 'Admitted Peer')}
+                      </span>
                     </div>
                   </div>
-                </div>
-
-                <div className="text-right">
-                  <span className="text-[11px] text-slate-500 font-mono">
-                    {peer.isHost ? 'Room Creator' : (isSelf ? 'Sender / Receiver' : 'Admitted Peer')}
-                  </span>
                 </div>
               </div>
             );
