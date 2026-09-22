@@ -1,14 +1,1 @@
-[
-  {
-    "id": "e72864ed-3c51-483f-9ead-826f9336cf21",
-    "roomCode": "111222",
-    "senderId": "client_xmssarl",
-    "rollNumber": "REG888",
-    "peerName": "Student RegTest",
-    "admittedAt": 1790065113478,
-    "expiresAt": 1790324313478,
-    "durationMs": 259200000,
-    "durationHours": 72,
-    "admittedBy": "Yaswanth Chowdary Garapati"
-  }
-]
+[]
