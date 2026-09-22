@@ -213,12 +213,32 @@ function normalizeCode(code) {
   return code.toString().trim().toLowerCase().replace(/\s+/g, '');
 }
 
-// Student 72-Hour Admission Persistence: key -> admissionRecord
-// Key format: `${normalizedRoomCode}:${senderId}`
-// Value: { roomCode, senderId, rollNumber, peerName, admittedAt, expiresAt }
+// Student 72-Hour Admission Persistence Engine
+// Indexed by normalizedRoomCode + Registration Number (Roll Number) as primary key,
+// with senderId fallback when roll number is not provided.
 const ADMISSIONS_FILE = path.join(__dirname, '..', 'server', 'data', 'student_admissions.json');
 const studentAdmissionsStore = new Map();
-const ADMISSION_DURATION_MS = 72 * 60 * 60 * 1000; // 72 hours
+const roomDefaultDurations = new Map(); // normRoom -> durationMs
+const DEFAULT_ADMISSION_DURATION_MS = 72 * 60 * 60 * 1000; // 72 hours default
+
+function getRoomDefaultDuration(roomCode) {
+  const norm = normalizeCode(roomCode);
+  return roomDefaultDurations.get(norm) || DEFAULT_ADMISSION_DURATION_MS;
+}
+
+function setRoomDefaultDuration(roomCode, durationMs) {
+  const norm = normalizeCode(roomCode);
+  roomDefaultDurations.set(norm, durationMs);
+}
+
+function getAdmissionKey(roomCode, rollNumber, senderId) {
+  const normRoom = normalizeCode(roomCode);
+  const normRoll = (rollNumber || '').toString().trim().toUpperCase();
+  if (normRoll) {
+    return `${normRoom}:roll:${normRoll}`;
+  }
+  return `${normRoom}:device:${senderId || 'unknown'}`;
+}
 
 function saveAdmissionsToFile() {
   try {
@@ -239,7 +259,7 @@ function loadAdmissionsFromFile() {
         const now = Date.now();
         for (const item of list) {
           if (item && item.expiresAt && item.expiresAt > now) {
-            const key = `${normalizeCode(item.roomCode)}:${item.senderId}`;
+            const key = getAdmissionKey(item.roomCode, item.rollNumber, item.senderId);
             studentAdmissionsStore.set(key, item);
           }
         }
@@ -252,66 +272,214 @@ function loadAdmissionsFromFile() {
 
 loadAdmissionsFromFile();
 
-// Check if student has a valid, unexpired 72-hour admission for this room, device, and exact student identity
+// Check if student with this registration number has a valid, unexpired admission for this room
 function checkStudentAdmission({ roomCode, senderId, rollNumber, peerName }) {
-  if (!roomCode || !senderId) return false;
+  if (!roomCode) return false;
   const normRoom = normalizeCode(roomCode);
-  const key = `${normRoom}:${senderId}`;
-  const record = studentAdmissionsStore.get(key);
+  const normReqRoll = (rollNumber || '').toString().trim().toUpperCase();
+  const normReqName = (peerName || '').toString().trim().toLowerCase();
+
+  // Try primary lookup by registration number (Roll Number)
+  let record = null;
+  let recordKey = null;
+
+  if (normReqRoll) {
+    recordKey = `${normRoom}:roll:${normReqRoll}`;
+    record = studentAdmissionsStore.get(recordKey);
+  }
+
+  // Fallback lookup by device client ID
+  if (!record && senderId) {
+    const deviceKey = `${normRoom}:device:${senderId}`;
+    record = studentAdmissionsStore.get(deviceKey);
+    recordKey = deviceKey;
+    if (!record) {
+      const legacyKey = `${normRoom}:${senderId}`;
+      record = studentAdmissionsStore.get(legacyKey);
+      recordKey = legacyKey;
+    }
+  }
+
   if (!record) return false;
 
-  // Check 72-hour expiration
+  // Check expiration (default 72h or faculty modified)
   if (Date.now() > record.expiresAt) {
-    studentAdmissionsStore.delete(key);
+    studentAdmissionsStore.delete(recordKey);
     saveAdmissionsToFile();
     return false;
   }
 
-  // Must match exact Student ID / roll number that faculty approved
-  const normReqRoll = (rollNumber || '').toString().trim().toUpperCase();
+  // Identity verification:
+  // 1. If student ID / roll number is provided on request and on record, they must match!
   const normRecRoll = (record.rollNumber || '').toString().trim().toUpperCase();
   if (normReqRoll && normRecRoll && normReqRoll !== normRecRoll) {
-    // Student ID changed on same device -> must ask faculty permission!
-    return false;
+    return false; // Student ID changed -> requires faculty approval
   }
 
-  // Must match exact student name that faculty approved
-  const normReqName = (peerName || '').toString().trim().toLowerCase();
+  // 2. If student name is provided on request and on record, they must match!
   const normRecName = (record.peerName || '').toString().trim().toLowerCase();
   if (normReqName && normRecName && normReqName !== normRecName) {
-    // Student name changed on same device -> must ask faculty permission!
-    return false;
+    return false; // Student name changed -> requires faculty approval
+  }
+
+  // Update latest senderId if changed
+  if (senderId && record.senderId !== senderId) {
+    record.senderId = senderId;
+    saveAdmissionsToFile();
   }
 
   return true;
 }
 
-// Grant 72-hour student admission when faculty admits student
-function grantStudentAdmission({ roomCode, senderId, rollNumber, peerName }) {
-  if (!roomCode || !senderId) return;
+// Grant student admission when faculty admits student
+function grantStudentAdmission({ roomCode, senderId, rollNumber, peerName, durationHours, durationMs, admittedBy }) {
+  if (!roomCode) return;
   const normRoom = normalizeCode(roomCode);
-  const key = `${normRoom}:${senderId}`;
+  const dur = durationMs || (durationHours ? Number(durationHours) * 3600 * 1000 : getRoomDefaultDuration(roomCode));
+  const now = Date.now();
+  const normRoll = (rollNumber || '').toString().trim().toUpperCase();
+  const key = getAdmissionKey(normRoom, normRoll, senderId);
+
   const record = {
+    id: uuidv4(),
     roomCode: normRoom,
-    senderId,
-    rollNumber: (rollNumber || '').toString().trim().toUpperCase(),
+    senderId: senderId || '',
+    rollNumber: normRoll,
     peerName: (peerName || '').toString().trim(),
-    admittedAt: Date.now(),
-    expiresAt: Date.now() + ADMISSION_DURATION_MS
+    admittedAt: now,
+    expiresAt: now + dur,
+    durationMs: dur,
+    durationHours: Math.round(dur / 3600000),
+    admittedBy: admittedBy || 'Faculty Host'
   };
+
   studentAdmissionsStore.set(key, record);
+
+  // Also clean up any legacy keys
+  if (senderId) {
+    const legacyKey = `${normRoom}:${senderId}`;
+    if (studentAdmissionsStore.has(legacyKey) && legacyKey !== key) {
+      studentAdmissionsStore.delete(legacyKey);
+    }
+  }
+
+  saveAdmissionsToFile();
+  return record;
+}
+
+// Get all active / admitted students for a specified room (Faculty only)
+function getRoomAdmissions(roomCode) {
+  const norm = normalizeCode(roomCode);
+  const results = [];
+  const now = Date.now();
+  for (const record of studentAdmissionsStore.values()) {
+    if (normalizeCode(record.roomCode) === norm) {
+      results.push({
+        ...record,
+        isExpired: now > record.expiresAt,
+        remainingMs: Math.max(0, record.expiresAt - now),
+        remainingHours: (Math.max(0, record.expiresAt - now) / 3600000).toFixed(1)
+      });
+    }
+  }
+  return results.sort((a, b) => b.admittedAt - a.admittedAt);
+}
+
+// Modify expiration for a specific student (Faculty only)
+function modifyStudentAdmissionExpiry({ roomCode, rollNumber, senderId, addHours, newDurationHours, newExpiresAt }) {
+  if (!roomCode) return null;
+  const normRoom = normalizeCode(roomCode);
+  const normRoll = (rollNumber || '').toString().trim().toUpperCase();
+  let key = normRoll ? `${normRoom}:roll:${normRoll}` : `${normRoom}:device:${senderId}`;
+  let record = studentAdmissionsStore.get(key);
+
+  if (!record && senderId) {
+    key = `${normRoom}:${senderId}`;
+    record = studentAdmissionsStore.get(key);
+  }
+
+  if (!record) {
+    // Search by rollNumber or senderId in values
+    for (const [k, v] of studentAdmissionsStore.entries()) {
+      if (normalizeCode(v.roomCode) === normRoom && (
+        (normRoll && v.rollNumber === normRoll) ||
+        (senderId && v.senderId === senderId)
+      )) {
+        record = v;
+        key = k;
+        break;
+      }
+    }
+  }
+
+  if (!record) return null;
+
+  const now = Date.now();
+  if (newExpiresAt) {
+    record.expiresAt = Number(newExpiresAt);
+  } else if (addHours) {
+    record.expiresAt = Math.max(now, record.expiresAt) + (Number(addHours) * 3600 * 1000);
+  } else if (newDurationHours) {
+    record.expiresAt = now + (Number(newDurationHours) * 3600 * 1000);
+  }
+  record.modifiedAt = now;
+  record.durationMs = record.expiresAt - record.admittedAt;
+  record.durationHours = Math.round(record.durationMs / 3600000);
+
+  studentAdmissionsStore.set(key, record);
+  saveAdmissionsToFile();
+  return record;
+}
+
+// Modify room default expiration duration (Faculty only)
+function modifyRoomDefaultExpiry({ roomCode, durationHours, applyToExisting }) {
+  if (!roomCode || !durationHours) return;
+  const normRoom = normalizeCode(roomCode);
+  const durMs = Number(durationHours) * 3600 * 1000;
+  setRoomDefaultDuration(normRoom, durMs);
+
+  if (applyToExisting) {
+    const now = Date.now();
+    for (const [key, record] of studentAdmissionsStore.entries()) {
+      if (normalizeCode(record.roomCode) === normRoom) {
+        record.expiresAt = now + durMs;
+        record.durationMs = durMs;
+        record.durationHours = Number(durationHours);
+        record.modifiedAt = now;
+      }
+    }
+  }
   saveAdmissionsToFile();
 }
 
-// Revoke student admission (e.g. if faculty kicks or denies student)
-function revokeStudentAdmission(roomCode, senderId) {
-  if (!roomCode || !senderId) return;
+// Revoke student admission (Faculty only)
+function revokeStudentAdmission(roomCode, rollNumber, senderId) {
+  if (!roomCode) return;
   const normRoom = normalizeCode(roomCode);
-  const key = `${normRoom}:${senderId}`;
-  if (studentAdmissionsStore.has(key)) {
-    studentAdmissionsStore.delete(key);
-    saveAdmissionsToFile();
+  const normRoll = (rollNumber || '').toString().trim().toUpperCase();
+
+  if (normRoll) {
+    const rollKey = `${normRoom}:roll:${normRoll}`;
+    studentAdmissionsStore.delete(rollKey);
   }
+  if (senderId) {
+    const devKey = `${normRoom}:device:${senderId}`;
+    const legacyKey = `${normRoom}:${senderId}`;
+    studentAdmissionsStore.delete(devKey);
+    studentAdmissionsStore.delete(legacyKey);
+  }
+
+  // Clean sweep for any matching entry
+  for (const [key, record] of studentAdmissionsStore.entries()) {
+    if (normalizeCode(record.roomCode) === normRoom && (
+      (normRoll && record.rollNumber === normRoll) ||
+      (senderId && record.senderId === senderId)
+    )) {
+      studentAdmissionsStore.delete(key);
+    }
+  }
+
+  saveAdmissionsToFile();
 }
 
 function getOrCreateRoom(codeOrSlug, creatorId = null, creatorName = 'User 1', roomLabel = '') {
@@ -1595,6 +1763,54 @@ app.delete('/api/admin/attendance', (req, res) => {
   return res.json({ success: true, message: `Cleared ${deletedCount} faculty login records` });
 });
 
+// Faculty / Admin: Get all student admissions for a room
+app.get('/api/room/:roomCode/admissions', (req, res) => {
+  const { roomCode } = req.params;
+  const list = getRoomAdmissions(roomCode);
+  res.json({
+    success: true,
+    roomCode,
+    admissions: list,
+    defaultDurationHours: Math.round(getRoomDefaultDuration(roomCode) / (60 * 60 * 1000))
+  });
+});
+
+// Faculty / Admin: Modify expiration for a student admission
+app.post('/api/room/:roomCode/admissions/expiry', (req, res) => {
+  const { roomCode } = req.params;
+  const { rollNumber, senderId, addHours, newDurationHours, newExpiresAt } = req.body;
+  const updated = modifyStudentAdmissionExpiry({
+    roomCode,
+    rollNumber,
+    senderId,
+    addHours,
+    newDurationHours,
+    newExpiresAt
+  });
+  if (!updated) {
+    return res.status(404).json({ success: false, error: 'Admission record not found' });
+  }
+  res.json({ success: true, record: updated });
+});
+
+// Faculty / Admin: Modify room default admission duration
+app.post('/api/room/:roomCode/admissions/default-expiry', (req, res) => {
+  const { roomCode } = req.params;
+  const { durationHours, applyToExisting } = req.body;
+  if (!durationHours) {
+    return res.status(400).json({ success: false, error: 'durationHours required' });
+  }
+  modifyRoomDefaultExpiry({ roomCode, durationHours, applyToExisting });
+  res.json({ success: true, message: `Room default expiry updated to ${durationHours} hours` });
+});
+
+// Faculty / Admin: Revoke admission for a student
+app.delete('/api/room/:roomCode/admissions/:rollNumber', (req, res) => {
+  const { roomCode, rollNumber } = req.params;
+  revokeStudentAdmission(roomCode, rollNumber, req.query.senderId);
+  res.json({ success: true, message: `Admission revoked for ${rollNumber}` });
+});
+
 // Faculty: Get specific faculty rooms
 app.get('/api/faculty/:facultyId/rooms', (req, res) => {
   const { facultyId } = req.params;
@@ -2177,7 +2393,7 @@ io.on('connection', (socket) => {
   });
 
   // Host Action: Admit a specific waiting peer
-  socket.on('admit-peer', ({ roomCode, targetSocketId }) => {
+  socket.on('admit-peer', ({ roomCode, targetSocketId, durationHours }) => {
     if (!roomCode || !targetSocketId) return;
     const room = getOrCreateRoom(roomCode);
     const normalized = normalizeCode(room.code);
@@ -2190,13 +2406,17 @@ io.on('connection', (socket) => {
     if (!waitingPeer) return;
 
     room.waitingPeers.delete(targetSocketId);
-    if (waitingPeer.senderId) {
-      room.admittedClients.add(waitingPeer.senderId);
+    if (waitingPeer.senderId || waitingPeer.rollNumber) {
+      if (waitingPeer.senderId) {
+        room.admittedClients.add(waitingPeer.senderId);
+      }
       grantStudentAdmission({
         roomCode: normalized,
         senderId: waitingPeer.senderId,
         rollNumber: waitingPeer.rollNumber,
-        peerName: waitingPeer.peerName
+        peerName: waitingPeer.peerName,
+        durationHours: durationHours || (room.admissionDurationMs ? room.admissionDurationMs / 3600000 : 72),
+        admittedBy: room.hostName || 'Faculty Host'
       });
     }
 
@@ -2253,7 +2473,6 @@ io.on('connection', (socket) => {
       io.to(normalized).emit('peer-joined', {
         peer: peerInfo,
         peers: Array.from(room.peers.values()),
-        peerName: peerInfo.peerName,
         peerCount: room.peers.size
       });
     }
@@ -2261,6 +2480,13 @@ io.on('connection', (socket) => {
     // Update host with latest pending requests
     socket.emit('pending-requests-updated', {
       pendingRequests: Array.from(room.waitingPeers.values())
+    });
+
+    // Notify host of updated admissions
+    socket.emit('room-admissions-updated', {
+      roomCode: room.code,
+      admissions: getRoomAdmissions(room.code),
+      defaultDurationHours: Math.round(getRoomDefaultDuration(room.code) / (60 * 60 * 1000))
     });
   });
 
@@ -2275,9 +2501,7 @@ io.on('connection', (socket) => {
     const waitingPeer = room.waitingPeers.get(targetSocketId);
     if (waitingPeer) {
       room.waitingPeers.delete(targetSocketId);
-      if (waitingPeer.senderId) {
-        revokeStudentAdmission(room.code, waitingPeer.senderId);
-      }
+      revokeStudentAdmission(room.code, waitingPeer.rollNumber, waitingPeer.senderId);
       const targetSocket = io.sockets.sockets.get(targetSocketId);
       if (targetSocket) {
         targetSocket.emit('access-denied', {
@@ -2293,7 +2517,7 @@ io.on('connection', (socket) => {
   });
 
   // Host Action: Admit all waiting peers
-  socket.on('admit-all', ({ roomCode }) => {
+  socket.on('admit-all', ({ roomCode, durationHours }) => {
     if (!roomCode) return;
     const room = getOrCreateRoom(roomCode);
     const callerPeer = room.peers.get(socket.id);
@@ -2305,13 +2529,17 @@ io.on('connection', (socket) => {
     room.waitingPeers.clear();
 
     for (const waitingPeer of waitingList) {
-      if (waitingPeer.senderId) {
-        room.admittedClients.add(waitingPeer.senderId);
+      if (waitingPeer.senderId || waitingPeer.rollNumber) {
+        if (waitingPeer.senderId) {
+          room.admittedClients.add(waitingPeer.senderId);
+        }
         grantStudentAdmission({
           roomCode: normalized,
           senderId: waitingPeer.senderId,
           rollNumber: waitingPeer.rollNumber,
-          peerName: waitingPeer.peerName
+          peerName: waitingPeer.peerName,
+          durationHours: durationHours || (room.admissionDurationMs ? room.admissionDurationMs / 3600000 : 72),
+          admittedBy: room.hostName || 'Faculty Host'
         });
       }
       const targetSocket = io.sockets.sockets.get(waitingPeer.socketId);
@@ -2373,6 +2601,12 @@ io.on('connection', (socket) => {
     socket.emit('pending-requests-updated', {
       pendingRequests: []
     });
+
+    socket.emit('room-admissions-updated', {
+      roomCode: room.code,
+      admissions: getRoomAdmissions(room.code),
+      defaultDurationHours: Math.round(getRoomDefaultDuration(room.code) / (60 * 60 * 1000))
+    });
   });
 
   // Host Action: Kick / Remove peer
@@ -2385,9 +2619,11 @@ io.on('connection', (socket) => {
 
     const targetSocket = io.sockets.sockets.get(targetSocketId);
     const removedPeer = room.peers.get(targetSocketId);
-    if (removedPeer && removedPeer.senderId) {
-      room.admittedClients.delete(removedPeer.senderId);
-      revokeStudentAdmission(room.code, removedPeer.senderId);
+    if (removedPeer) {
+      if (removedPeer.senderId) {
+        room.admittedClients.delete(removedPeer.senderId);
+      }
+      revokeStudentAdmission(room.code, removedPeer.rollNumber, removedPeer.senderId);
     }
     room.peers.delete(targetSocketId);
     recordExit(room, targetSocketId);
@@ -2403,6 +2639,127 @@ io.on('connection', (socket) => {
       socketId: targetSocketId,
       peers: Array.from(room.peers.values()),
       peerCount: room.peers.size
+    });
+
+    socket.emit('room-admissions-updated', {
+      roomCode: room.code,
+      admissions: getRoomAdmissions(room.code),
+      defaultDurationHours: Math.round(getRoomDefaultDuration(room.code) / (60 * 60 * 1000))
+    });
+  });
+
+  // Faculty Only: Get all student admissions for a room
+  socket.on('get-room-admissions', ({ roomCode }) => {
+    if (!roomCode) return;
+    const normalized = normalizeCode(roomCode);
+    const room = rooms.get(normalized);
+    if (!room) return;
+    const callerPeer = room.peers.get(socket.id);
+    const isHost = (room.hostSocketId === socket.id) || (callerPeer && callerPeer.isHost) || (callerPeer && callerPeer.role?.includes('Faculty'));
+    if (!isHost) {
+      socket.emit('error-message', { message: 'Unauthorized: Only faculty can view room admissions.' });
+      return;
+    }
+    socket.emit('room-admissions-data', {
+      roomCode: room.code,
+      admissions: getRoomAdmissions(room.code),
+      defaultDurationHours: Math.round(getRoomDefaultDuration(room.code) / (60 * 60 * 1000))
+    });
+  });
+
+  // Faculty Only: Modify expiration time for a specific student admission
+  socket.on('modify-admission-expiry', ({ roomCode, rollNumber, senderId, addHours, newDurationHours, newExpiresAt }) => {
+    if (!roomCode) return;
+    const normalized = normalizeCode(roomCode);
+    const room = rooms.get(normalized);
+    if (!room) return;
+    const callerPeer = room.peers.get(socket.id);
+    const isHost = (room.hostSocketId === socket.id) || (callerPeer && callerPeer.isHost) || (callerPeer && callerPeer.role?.includes('Faculty'));
+    if (!isHost) {
+      socket.emit('error-message', { message: 'Unauthorized: Only faculty can modify student admission expiration.' });
+      return;
+    }
+
+    modifyStudentAdmissionExpiry({
+      roomCode,
+      rollNumber,
+      senderId,
+      addHours,
+      newDurationHours,
+      newExpiresAt
+    });
+
+    io.to(normalized).emit('room-admissions-updated', {
+      roomCode: room.code,
+      admissions: getRoomAdmissions(room.code),
+      defaultDurationHours: Math.round(getRoomDefaultDuration(room.code) / (60 * 60 * 1000))
+    });
+  });
+
+  // Faculty Only: Modify room-wide default admission expiration
+  socket.on('modify-room-default-expiry', ({ roomCode, durationHours, applyToExisting }) => {
+    if (!roomCode || !durationHours) return;
+    const normalized = normalizeCode(roomCode);
+    const room = rooms.get(normalized);
+    if (!room) return;
+    const callerPeer = room.peers.get(socket.id);
+    const isHost = (room.hostSocketId === socket.id) || (callerPeer && callerPeer.isHost) || (callerPeer && callerPeer.role?.includes('Faculty'));
+    if (!isHost) {
+      socket.emit('error-message', { message: 'Unauthorized: Only faculty can modify room expiration duration.' });
+      return;
+    }
+
+    modifyRoomDefaultExpiry({
+      roomCode,
+      durationHours,
+      applyToExisting
+    });
+
+    io.to(normalized).emit('room-admissions-updated', {
+      roomCode: room.code,
+      admissions: getRoomAdmissions(room.code),
+      defaultDurationHours: Number(durationHours)
+    });
+  });
+
+  // Faculty Only: Revoke student admission
+  socket.on('revoke-admission', ({ roomCode, rollNumber, senderId }) => {
+    if (!roomCode) return;
+    const normalized = normalizeCode(roomCode);
+    const room = rooms.get(normalized);
+    if (!room) return;
+    const callerPeer = room.peers.get(socket.id);
+    const isHost = (room.hostSocketId === socket.id) || (callerPeer && callerPeer.isHost) || (callerPeer && callerPeer.role?.includes('Faculty'));
+    if (!isHost) {
+      socket.emit('error-message', { message: 'Unauthorized: Only faculty can revoke student admission.' });
+      return;
+    }
+
+    revokeStudentAdmission(room.code, rollNumber, senderId);
+
+    // If student is currently connected in the room, kick them
+    const normRoll = (rollNumber || '').toString().trim().toUpperCase();
+    for (const [sId, peer] of room.peers.entries()) {
+      if ((normRoll && (peer.rollNumber || '').toUpperCase() === normRoll) || (senderId && peer.senderId === senderId)) {
+        room.peers.delete(sId);
+        recordExit(room, sId);
+        const s = io.sockets.sockets.get(sId);
+        if (s) {
+          s.leave(normalized);
+          s.emit('kicked-from-room', { message: 'Your room admission was revoked by the faculty host.' });
+        }
+      }
+    }
+
+    io.to(normalized).emit('peer-left', {
+      peers: Array.from(room.peers.values()),
+      peerCount: room.peers.size
+    });
+
+    io.to(normalized).emit('room-admissions-updated', {
+      roomCode: room.code,
+      admissions: getRoomAdmissions(room.code),
+      defaultDurationHours: Math.round(getRoomDefaultDuration(room.code) / (60 * 60 * 1000))
     });
   });
 

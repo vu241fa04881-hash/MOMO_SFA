@@ -143,6 +143,10 @@ export default function App() {
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
 
+  // Faculty Student Admissions & Expiry state
+  const [admissionsList, setAdmissionsList] = useState([]);
+  const [roomDefaultDurationHours, setRoomDefaultDurationHours] = useState(72);
+
   // Room & Connection state
   const [roomCode, setRoomCode] = useState('');
   const [roomSlug, setRoomSlug] = useState('');
@@ -441,14 +445,15 @@ export default function App() {
   }, [activePortal]);
 
   // Host Admit/Deny Actions
-  const handleAdmitPeer = useCallback((targetSocketId) => {
+  const handleAdmitPeer = useCallback((targetSocketId, durationHours) => {
     const activeRoom = roomCodeRef.current || roomCode;
     if (!socketRef.current || !activeRoom) return;
     socketRef.current.emit('admit-peer', {
       roomCode: activeRoom,
-      targetSocketId
+      targetSocketId,
+      durationHours: durationHours || 72
     });
-    addToast('Admitted device to session!', 'success');
+    addToast('Admitted student to classroom!', 'success');
   }, [addToast, roomCode]);
 
   const handleDenyPeer = useCallback((targetSocketId) => {
@@ -461,15 +466,58 @@ export default function App() {
     addToast('Declined join request', 'info');
   }, [addToast, roomCode]);
 
-  const handleAdmitAll = useCallback(() => {
+  const handleAdmitAll = useCallback((durationHours) => {
     const activeRoom = roomCodeRef.current || roomCode;
     if (!socketRef.current || !activeRoom) return;
     socketRef.current.emit('admit-all', {
-      roomCode: activeRoom
+      roomCode: activeRoom,
+      durationHours: durationHours || 72
     });
     setIsRequestModalOpen(false);
-    addToast('Admitted all waiting guests!', 'success');
+    addToast('Admitted all waiting students!', 'success');
   }, [addToast, roomCode]);
+
+  // Faculty Admissions & Expiry Actions
+  const handleModifyAdmissionExpiry = useCallback(({ rollNumber, senderId, addHours, newDurationHours, newExpiresAt }) => {
+    const activeRoom = roomCodeRef.current || roomCode;
+    if (!socketRef.current || !activeRoom) return;
+    socketRef.current.emit('modify-admission-expiry', {
+      roomCode: activeRoom,
+      rollNumber,
+      senderId,
+      addHours,
+      newDurationHours,
+      newExpiresAt
+    });
+  }, [roomCode]);
+
+  const handleModifyRoomDefaultExpiry = useCallback(({ durationHours, applyToExisting }) => {
+    const activeRoom = roomCodeRef.current || roomCode;
+    if (!socketRef.current || !activeRoom) return;
+    socketRef.current.emit('modify-room-default-expiry', {
+      roomCode: activeRoom,
+      durationHours,
+      applyToExisting
+    });
+  }, [roomCode]);
+
+  const handleRevokeAdmission = useCallback(({ rollNumber, senderId }) => {
+    const activeRoom = roomCodeRef.current || roomCode;
+    if (!socketRef.current || !activeRoom) return;
+    socketRef.current.emit('revoke-admission', {
+      roomCode: activeRoom,
+      rollNumber,
+      senderId
+    });
+  }, [roomCode]);
+
+  const handleRefreshAdmissions = useCallback(() => {
+    const activeRoom = roomCodeRef.current || roomCode;
+    if (!socketRef.current || !activeRoom) return;
+    socketRef.current.emit('get-room-admissions', {
+      roomCode: activeRoom
+    });
+  }, [roomCode]);
 
   // Guest Waiting Room Actions
   const handleCancelAccessRequest = useCallback(() => {
@@ -607,6 +655,17 @@ export default function App() {
       setAttendanceRecords(data.attendance || []);
     });
 
+    // Room admissions data updated (pushed to faculty)
+    socket.on('room-admissions-data', (data) => {
+      if (data.admissions) setAdmissionsList(data.admissions);
+      if (data.defaultDurationHours) setRoomDefaultDurationHours(data.defaultDurationHours);
+    });
+
+    socket.on('room-admissions-updated', (data) => {
+      if (data.admissions) setAdmissionsList(data.admissions);
+      if (data.defaultDurationHours) setRoomDefaultDurationHours(data.defaultDurationHours);
+    });
+
     // Room joined payload
     socket.on('room-joined', (data) => {
       setAccessStatus('admitted');
@@ -619,6 +678,7 @@ export default function App() {
         if (data.attendance) {
           setAttendanceRecords(data.attendance);
         }
+        socket.emit('get-room-admissions', { roomCode: data.code });
       }
       setRoomCode(data.code);
       setRoomSlug(data.slug);
@@ -1449,6 +1509,7 @@ export default function App() {
         onAdmit={handleAdmitPeer}
         onDeny={handleDenyPeer}
         onAdmitAll={handleAdmitAll}
+        defaultDurationHours={roomDefaultDurationHours}
       />
 
       {/* Admin / Faculty Attendance & Login Details Modal */}
@@ -1461,6 +1522,13 @@ export default function App() {
         addToast={addToast}
         onDeleteRecord={(id) => setAttendanceRecords(prev => prev.filter(r => r.id !== id))}
         onClearRecords={() => setAttendanceRecords([])}
+        isFaculty={true}
+        admissions={admissionsList}
+        defaultDurationHours={roomDefaultDurationHours}
+        onModifyAdmissionExpiry={handleModifyAdmissionExpiry}
+        onModifyRoomDefaultExpiry={handleModifyRoomDefaultExpiry}
+        onRevokeAdmission={handleRevokeAdmission}
+        onRefreshAdmissions={handleRefreshAdmissions}
       />
 
       {/* Toast Notifications */}
