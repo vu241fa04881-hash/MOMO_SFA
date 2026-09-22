@@ -2948,10 +2948,16 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Update room TTL expiration handler
+  // Update room TTL expiration handler (Faculty / Host Only)
   socket.on('update-room-ttl', ({ roomCode, ttlMinutes, peerName }) => {
     if (!roomCode || ttlMinutes === undefined) return;
     const room = getOrCreateRoom(roomCode);
+    const callerPeer = room.peers.get(socket.id);
+    const isHost = (room.hostSocketId === socket.id) || (callerPeer && callerPeer.isHost) || (callerPeer && callerPeer.role?.includes('Faculty'));
+    if (!isHost) {
+      socket.emit('error-message', { message: 'Unauthorized: Only faculty can change the room expiration timer.' });
+      return;
+    }
     room.ttlMinutes = ttlMinutes;
     room.lastActivity = Date.now();
 
@@ -2964,7 +2970,7 @@ io.on('connection', (socket) => {
 
     io.to(normalizeCode(room.code)).emit('room-ttl-updated', {
       ttlMinutes,
-      peerName: peerName || 'A peer'
+      peerName: peerName || (callerPeer ? callerPeer.peerName : 'Faculty Host')
     });
   });
 

@@ -323,8 +323,12 @@ export default function App() {
     handleSaveUserProfile({ name: newName });
   }, [handleSaveUserProfile]);
 
-  // Select Transfer Expiration TTL
+  // Select Transfer Expiration TTL (Faculty Host Only)
   const handleSelectTtl = useCallback((newTtl) => {
+    if (!isHost) {
+      addToast('Only faculty can change the transfer expiration timer', 'error');
+      return;
+    }
     setTtlMinutes(newTtl);
     const activeRoom = roomCodeRef.current;
     if (socketRef.current && activeRoom) {
@@ -335,7 +339,7 @@ export default function App() {
       });
     }
     addToast(`Room expiration set to ${formatTtlLabel(newTtl)}`, 'success');
-  }, [addToast]);
+  }, [isHost, addToast]);
 
   // Join Room via Socket.IO
   const joinRoom = useCallback((code, credentials = {}) => {
@@ -1141,7 +1145,9 @@ export default function App() {
         onOpenRenameModal={() => setIsRenameModalOpen(true)}
         onOpenDevicesModal={() => setIsDevicesModalOpen(true)}
         ttlMinutes={ttlMinutes}
-        onOpenTtlModal={() => setIsTtlModalOpen(true)}
+        onOpenTtlModal={() => {
+          if (isHost) setIsTtlModalOpen(true);
+        }}
         onNewTransfer={requestNewSession}
         onOpenQr={() => setIsQrModalOpen(true)}
         onOpenJoinModal={() => setIsJoinModalOpen(true)}
@@ -1194,15 +1200,25 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3 text-xs text-slate-400">
-            <button
-              onClick={() => setIsTtlModalOpen(true)}
-              title="Click to edit transfer expiration time"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-white/5 hover:border-amber-500/40 transition-all group active:scale-95 shadow-inner cursor-pointer"
-            >
-              <Clock className="w-3.5 h-3.5 text-amber-400 group-hover:animate-pulse" />
-              <span>Expires: <strong className="text-amber-300 font-semibold">{formatTtlLabel(ttlMinutes)}</strong></span>
-              <ChevronDown className="w-3 h-3 text-slate-500 group-hover:text-amber-400 transition-colors ml-0.5" />
-            </button>
+            {isHost ? (
+              <button
+                onClick={() => setIsTtlModalOpen(true)}
+                title="Click to edit transfer expiration time (Faculty only)"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-white/5 hover:border-amber-500/40 transition-all group active:scale-95 shadow-inner cursor-pointer"
+              >
+                <Clock className="w-3.5 h-3.5 text-amber-400 group-hover:animate-pulse" />
+                <span>Expires: <strong className="text-amber-300 font-semibold">{formatTtlLabel(ttlMinutes)}</strong></span>
+                <ChevronDown className="w-3 h-3 text-slate-500 group-hover:text-amber-400 transition-colors ml-0.5" />
+              </button>
+            ) : (
+              <div
+                title="Classroom transfer expiration is controlled by faculty"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/60 text-slate-400 border border-white/5 shadow-inner cursor-default"
+              >
+                <Clock className="w-3.5 h-3.5 text-amber-400/80" />
+                <span>Expires: <strong className="text-amber-300/90 font-semibold">{formatTtlLabel(ttlMinutes)}</strong></span>
+              </div>
+            )}
             <span className="hidden sm:inline">•</span>
             <span className="hidden sm:flex items-center gap-1.5 text-emerald-400">
               <ShieldCheck className="w-3.5 h-3.5" />
@@ -1469,7 +1485,7 @@ export default function App() {
       />
 
       <TtlModal
-        isOpen={isTtlModalOpen}
+        isOpen={Boolean(isHost && isTtlModalOpen)}
         onClose={() => setIsTtlModalOpen(false)}
         currentTtl={ttlMinutes}
         onSelectTtl={handleSelectTtl}
