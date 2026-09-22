@@ -16,7 +16,8 @@ import {
   CheckCircle2,
   LogOut,
   RefreshCw,
-  Trash2
+  Trash2,
+  UserMinus
 } from 'lucide-react';
 
 export default function AttendanceModal({
@@ -34,7 +35,8 @@ export default function AttendanceModal({
   onModifyAdmissionExpiry,
   onModifyRoomDefaultExpiry,
   onRevokeAdmission,
-  onRefreshAdmissions
+  onRefreshAdmissions,
+  onKickStudent
 }) {
   const [activeTab, setActiveTab] = useState('attendance'); // 'attendance' | 'admissions'
   const [searchTerm, setSearchTerm] = useState('');
@@ -563,13 +565,36 @@ export default function AttendanceModal({
                           </td>
 
                           <td className="py-3 px-3.5 text-right">
-                            <button
-                              onClick={() => handleDeleteStudentLog(item.id, item.name)}
-                              title="Delete this student attendance record"
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              {isFaculty && (item.status === 'Active' || item.status === 'Live' || !item.exitedAt) && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (window.confirm(`Are you sure you want to remove "${item.name || 'this student'}" from this classroom?`)) {
+                                      if (onKickStudent) {
+                                        onKickStudent({
+                                          socketId: item.socketId,
+                                          senderId: item.senderId,
+                                          rollNumber: item.rollNumber,
+                                          peerName: item.name
+                                        });
+                                      }
+                                    }
+                                  }}
+                                  title="Remove student from classroom now"
+                                  className="p-1.5 rounded-lg text-rose-400 hover:text-white hover:bg-rose-500/20 transition-colors cursor-pointer"
+                                >
+                                  <UserMinus className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleDeleteStudentLog(item.id, item.name)}
+                                title="Delete this student attendance record"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );

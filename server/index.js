@@ -2609,44 +2609,93 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Host Action: Kick / Remove peer
-  socket.on('kick-peer', ({ roomCode, targetSocketId }) => {
-    if (!roomCode || !targetSocketId) return;
+  // Host Action: Kick / Remove student peer (Faculty only)
+  const handleKickPeer = (targetSocketInstance, { roomCode, targetSocketId, senderId, rollNumber, peerName }) => {
+    if (!roomCode) return;
     const room = getOrCreateRoom(roomCode);
-    const callerPeer = room.peers.get(socket.id);
-    const isHost = (room.hostSocketId === socket.id) || (callerPeer && callerPeer.isHost);
-    if (!isHost) return;
+    const callerPeer = room.peers.get(targetSocketInstance.id);
+    const isHost = (room.hostSocketId === targetSocketInstance.id) || (callerPeer && callerPeer.isHost) || (callerPeer && callerPeer.role?.includes('Faculty'));
+    if (!isHost) {
+      targetSocketInstance.emit('error-message', { message: 'Unauthorized: Only faculty can remove students from the room.' });
+      return;
+    }
 
-    const targetSocket = io.sockets.sockets.get(targetSocketId);
-    const removedPeer = room.peers.get(targetSocketId);
-    if (removedPeer) {
+    let actualSocketId = targetSocketId;
+    let removedPeer = null;
+    let targetSocket = null;
+
+    if (actualSocketId && room.peers.has(actualSocketId)) {
+      removedPeer = room.peers.get(actualSocketId);
+      targetSocket = io.sockets.sockets.get(actualSocketId);
+    } else {
+      const normRoll = (rollNumber || '').toString().trim().toUpperCase();
+      for (const [sId, p] of room.peers.entries()) {
+        if ((senderId && p.senderId === senderId) || (normRoll && (p.rollNumber || '').toUpperCase() === normRoll)) {
+          actualSocketId = sId;
+          removedPeer = p;
+          targetSocket = io.sockets.sockets.get(sId);
+          break;
+        }
+      }
+    }
+
+    // Safety check: Cannot remove room host or faculty
+    if (removedPeer && (removedPeer.isHost || removedPeer.role?.includes('Faculty'))) {
+      targetSocketInstance.emit('error-message', { message: 'Cannot remove faculty or room host.' });
+      return;
+    }
+
+    const removedRoll = removedPeer ? removedPeer.rollNumber : rollNumber;
+    const removedSenderId = removedPeer ? removedPeer.senderId : senderId;
+    const removedName = removedPeer ? removedPeer.peerName : (peerName || 'Student');
+
+    if (removedPeer && actualSocketId) {
       if (removedPeer.senderId) {
         room.admittedClients.delete(removedPeer.senderId);
       }
-      revokeStudentAdmission(room.code, removedPeer.rollNumber, removedPeer.senderId);
+      room.peers.delete(actualSocketId);
+      recordExit(room, actualSocketId, removedSenderId);
+    } else if (removedSenderId || actualSocketId) {
+      recordExit(room, actualSocketId, removedSenderId);
     }
-    room.peers.delete(targetSocketId);
-    recordExit(room, targetSocketId);
-    notifyAdminAttendance(room);
+
+    // Revoke student 72-hour admission so they cannot immediately bypass waiting room
+    revokeStudentAdmission(room.code, removedRoll, removedSenderId);
 
     if (targetSocket) {
       targetSocket.leave(normalizeCode(room.code));
       targetSocket.emit('kicked-from-room', {
-        message: 'You have been removed from the session by the faculty host.'
+        message: 'You have been removed from the classroom by the faculty host.'
       });
     }
-    io.to(normalizeCode(room.code)).emit('peer-left', {
-      socketId: targetSocketId,
+
+    const normCode = normalizeCode(room.code);
+    io.to(normCode).emit('peer-left', {
+      socketId: actualSocketId,
+      peerName: removedName,
       peers: Array.from(room.peers.values()),
       peerCount: room.peers.size
     });
 
-    socket.emit('room-admissions-updated', {
+    notifyAdminAttendance(room);
+    io.to(normCode).emit('attendance-updated', {
+      attendance: getStudentAttendanceList(room)
+    });
+
+    io.to(normCode).emit('room-admissions-updated', {
       roomCode: room.code,
       admissions: getRoomAdmissions(room.code),
       defaultDurationHours: Math.round(getRoomDefaultDuration(room.code) / (60 * 60 * 1000))
     });
-  });
+
+    targetSocketInstance.emit('student-removed-success', {
+      peerName: removedName,
+      rollNumber: removedRoll
+    });
+  };
+
+  socket.on('kick-peer', (payload) => handleKickPeer(socket, payload));
+  socket.on('remove-peer-from-room', (payload) => handleKickPeer(socket, payload));
 
   // Faculty Only: Get all student admissions for a room
   socket.on('get-room-admissions', ({ roomCode }) => {

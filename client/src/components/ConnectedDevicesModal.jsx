@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { X, Users, Smartphone, Laptop, Tablet, Monitor, QrCode, Sparkles, Crown } from 'lucide-react';
+import { X, Users, Smartphone, Laptop, Tablet, Monitor, QrCode, Sparkles, Crown, UserMinus } from 'lucide-react';
 
 function getDeviceIcon(name = '') {
   const lower = name.toLowerCase();
@@ -14,7 +14,9 @@ export default function ConnectedDevicesModal({
   onClose,
   peers,
   currentClientId,
-  onOpenQr
+  onOpenQr,
+  isHost = false,
+  onKickPeer
 }) {
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -112,6 +114,23 @@ export default function ConnectedDevicesModal({
                     </div>
                   </div>
                 </div>
+
+                {/* Faculty Action: Remove Student */}
+                {isHost && !peer.isHost && !isSelf && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm(`Are you sure you want to remove "${peer.peerName || 'Student'}" from this classroom?`)) {
+                        if (onKickPeer) onKickPeer(peer);
+                      }
+                    }}
+                    title={`Remove ${peer.peerName || 'student'} from this room`}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-semibold transition-all active:scale-95 shrink-0 cursor-pointer"
+                  >
+                    <UserMinus className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Remove</span>
+                  </button>
+                )}
               </div>
             );
           })}

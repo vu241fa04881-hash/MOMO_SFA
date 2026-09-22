@@ -523,6 +523,21 @@ export default function App() {
     });
   }, [roomCode]);
 
+  // Faculty Kick / Remove Student Action
+  const handleKickPeer = useCallback((peer) => {
+    if (!peer) return;
+    const activeRoom = roomCodeRef.current || roomCode;
+    if (!socketRef.current || !activeRoom) return;
+    socketRef.current.emit('kick-peer', {
+      roomCode: activeRoom.toString().trim().toLowerCase().replace(/\s+/g, ''),
+      targetSocketId: peer.socketId,
+      senderId: peer.senderId,
+      rollNumber: peer.rollNumber || peer.roll_number,
+      peerName: peer.peerName || peer.name
+    });
+    addToast(`Removing ${peer.peerName || peer.name || 'student'} from classroom...`, 'info');
+  }, [roomCode, addToast]);
+
   // Guest Waiting Room Actions
   const handleCancelAccessRequest = useCallback(() => {
     const targetCode = waitingRoomInfo?.code || roomCodeRef.current || roomCode;
@@ -652,6 +667,22 @@ export default function App() {
       setAccessStatus('denied');
       setDeniedMessage(data.message || 'The host declined your request to join.');
       addToast('Join request declined by host', 'error');
+    });
+
+    // Student was kicked / removed from room by faculty
+    socket.on('kicked-from-room', (data) => {
+      setAccessStatus('denied');
+      setDeniedMessage(data?.message || 'You have been removed from the classroom by the faculty host.');
+      setRoomCode('');
+      roomCodeRef.current = '';
+      setItems([]);
+      setPeers([]);
+      window.location.hash = '#portal=student';
+      addToast(data?.message || 'You have been removed from the classroom by faculty', 'error');
+    });
+
+    socket.on('student-removed-success', (data) => {
+      addToast(`Student "${data.peerName || 'Student'}" has been removed from the classroom`, 'success');
     });
 
     // Attendance Log updated (pushed to host)
@@ -1497,6 +1528,8 @@ export default function App() {
         peers={peers}
         currentClientId={CLIENT_ID}
         onOpenQr={() => setIsQrModalOpen(true)}
+        isHost={isHost}
+        onKickPeer={handleKickPeer}
       />
 
       {/* Waiting Room Overlay for Students waiting for Faculty approval */}
@@ -1545,6 +1578,7 @@ export default function App() {
         onModifyRoomDefaultExpiry={handleModifyRoomDefaultExpiry}
         onRevokeAdmission={handleRevokeAdmission}
         onRefreshAdmissions={handleRefreshAdmissions}
+        onKickStudent={handleKickPeer}
       />
 
       {/* Toast Notifications */}
