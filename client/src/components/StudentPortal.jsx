@@ -119,7 +119,7 @@ export default function StudentPortal({
 
   // IF NOT IN A ROOM: SHOW JOIN CLASSROOM FORM
   return (
-    <div className="min-h-[75vh] flex items-center justify-center p-4 sm:p-6">
+    <div className="flex-1 flex items-center justify-center p-4 sm:p-6 animate-in fade-in">
       <div className="relative w-full max-w-md rounded-3xl glass-panel p-6 sm:p-8 shadow-2xl border border-cyan-500/30 flex flex-col gap-6 ring-1 ring-cyan-500/20">
         <div className="flex flex-col items-center text-center gap-2">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/30 mb-1">

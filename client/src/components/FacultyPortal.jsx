@@ -19,7 +19,8 @@ import {
   Play, 
   ArrowLeft,
   BookOpen,
-  Crown
+  Crown,
+  RefreshCw
 } from 'lucide-react';
 import { copyToClipboard } from '../utils/helpers';
 import { playCopySound } from '../utils/audio';
@@ -38,6 +39,7 @@ export default function FacultyPortal({
   isRoomLocked,
   onToggleLockRoom,
   addToast,
+  refreshTrigger,
   children // Active classroom workspace when launched
 }) {
   // Login form state
@@ -71,7 +73,7 @@ export default function FacultyPortal({
     if (facultyUser) {
       loadFacultyRooms();
     }
-  }, [facultyUser]);
+  }, [facultyUser, refreshTrigger, currentRoomCode]);
 
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
@@ -109,7 +111,7 @@ export default function FacultyPortal({
   // IF NOT LOGGED IN: SHOW FACULTY LOGIN FORM
   if (!facultyUser) {
     return (
-      <div className="min-h-[75vh] flex items-center justify-center p-4 sm:p-6">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 animate-in fade-in">
         <div className="relative w-full max-w-md rounded-3xl glass-panel p-6 sm:p-8 shadow-2xl border border-indigo-500/30 flex flex-col gap-6 ring-1 ring-indigo-500/20">
           <div className="flex flex-col items-center text-center gap-2">
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30 mb-1">
@@ -177,7 +179,7 @@ export default function FacultyPortal({
   // IF FACULTY IS CURRENTLY IN AN ACTIVE CLASSROOM SESSION:
   if (currentRoomCode) {
     return (
-      <div className="flex flex-col gap-4 animate-in fade-in">
+      <div className="w-full flex flex-col gap-4 animate-in fade-in">
         {/* Semi-Admin Classroom Control Header */}
         <div className="max-w-7xl mx-auto w-full px-4 pt-3">
           <div className="p-3 sm:p-4 rounded-2xl glass-panel border border-indigo-500/30 shadow-lg flex flex-wrap items-center justify-between gap-3">
@@ -266,7 +268,7 @@ export default function FacultyPortal({
 
   // FACULTY DASHBOARD: LIST OF ASSIGNED ROOMS
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 flex flex-col gap-6 animate-in fade-in">
+    <div className="w-full max-w-7xl mx-auto px-4 py-4 sm:py-6 flex flex-col gap-6 animate-in fade-in">
       {/* Faculty Profile Hero */}
       <div className="rounded-3xl glass-panel p-6 border border-white/10 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -307,7 +309,7 @@ export default function FacultyPortal({
 
       {/* Assigned Classrooms Hub */}
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <DoorOpen className="w-5 h-5 text-indigo-400" />
@@ -317,6 +319,15 @@ export default function FacultyPortal({
               Assigned by Main Admin. Click "Launch Classroom" to host the session and approve students.
             </p>
           </div>
+          <button
+            onClick={loadFacultyRooms}
+            disabled={isLoadingRooms}
+            title="Refresh authorized classrooms"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-white/10 text-xs font-semibold transition-colors cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-indigo-400 ${isLoadingRooms ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
         </div>
 
         {assignedRooms.length === 0 ? (

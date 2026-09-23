@@ -148,6 +148,7 @@ export default function App() {
   const [roomDefaultDurationHours, setRoomDefaultDurationHours] = useState(72);
 
   // Room & Connection state
+  const [facultyRoomsRefreshTrigger, setFacultyRoomsRefreshTrigger] = useState(0);
   const [roomCode, setRoomCode] = useState('');
   const [roomSlug, setRoomSlug] = useState('');
   const [formattedCode, setFormattedCode] = useState('');
@@ -669,16 +670,87 @@ export default function App() {
       addToast('Join request declined by host', 'error');
     });
 
-    // Student was kicked / removed from room by faculty
+    // Classroom deleted by System Administrator
+    const handleRoomDeleted = (data) => {
+      const isFaculty = activePortalRef.current === 'faculty' || !!facultyUser;
+      if (socketRef.current && roomCodeRef.current) {
+        socketRef.current.emit('leave-room', { roomCode: roomCodeRef.current });
+      }
+      setRoomCode('');
+      roomCodeRef.current = '';
+      setItems([]);
+      setPeers([]);
+      setAccessStatus('none');
+      setWaitingRoomInfo(null);
+      setFacultyRoomsRefreshTrigger(prev => prev + 1);
+
+      if (isFaculty) {
+        setActivePortal('faculty');
+        activePortalRef.current = 'faculty';
+        sessionStorage.setItem('momo_active_portal', 'faculty');
+        isInternalHashChangeRef.current = true;
+        window.history.replaceState(null, '', '#portal=faculty');
+        addToast(data?.message || 'This classroom was deleted by the System Administrator. Returned to Faculty Dashboard.', 'info');
+      } else {
+        setActivePortal('student');
+        activePortalRef.current = 'student';
+        sessionStorage.setItem('momo_active_portal', 'student');
+        isInternalHashChangeRef.current = true;
+        window.history.replaceState(null, '', '#portal=student');
+        addToast(data?.message || 'Classroom session was deleted by Administrator.', 'info');
+      }
+    };
+
+    socket.on('room-deleted', handleRoomDeleted);
+
+    // Student was kicked / removed from room by faculty (or room deleted)
     socket.on('kicked-from-room', (data) => {
+      if (data?.reason === 'room-deleted') {
+        handleRoomDeleted(data);
+        return;
+      }
       setAccessStatus('denied');
       setDeniedMessage(data?.message || 'You have been removed from the classroom by the faculty host.');
       setRoomCode('');
       roomCodeRef.current = '';
       setItems([]);
       setPeers([]);
-      window.location.hash = '#portal=student';
+      isInternalHashChangeRef.current = true;
+      window.history.replaceState(null, '', '#portal=student');
       addToast(data?.message || 'You have been removed from the classroom by faculty', 'error');
+    });
+
+    // Room not found or deleted by admin when attempting to join
+    socket.on('room-not-found', (data) => {
+      const isFaculty = activePortalRef.current === 'faculty' || !!facultyUser;
+      setRoomCode('');
+      roomCodeRef.current = '';
+      setItems([]);
+      setPeers([]);
+      setAccessStatus('none');
+      setWaitingRoomInfo(null);
+      setFacultyRoomsRefreshTrigger(prev => prev + 1);
+
+      if (isFaculty) {
+        setActivePortal('faculty');
+        activePortalRef.current = 'faculty';
+        sessionStorage.setItem('momo_active_portal', 'faculty');
+        isInternalHashChangeRef.current = true;
+        window.history.replaceState(null, '', '#portal=faculty');
+        addToast(data?.message || 'Classroom not found or was deleted by Admin.', 'error');
+      } else {
+        setActivePortal('student');
+        activePortalRef.current = 'student';
+        sessionStorage.setItem('momo_active_portal', 'student');
+        isInternalHashChangeRef.current = true;
+        window.history.replaceState(null, '', '#portal=student');
+        addToast(data?.message || 'Classroom not found.', 'error');
+      }
+    });
+
+    // Real-time broadcast when Admin updates/deletes faculty rooms
+    socket.on('faculty-rooms-updated', () => {
+      setFacultyRoomsRefreshTrigger(prev => prev + 1);
     });
 
     socket.on('student-removed-success', (data) => {
@@ -746,11 +818,7 @@ export default function App() {
       }
     });
 
-    socket.on('kicked-from-room', (data) => {
-      setAccessStatus('denied');
-      setDeniedMessage(data.message || 'You were removed from the classroom by the faculty host.');
-      addToast(data.message || 'Removed from session by faculty host', 'error');
-    });
+    // Duplicate removed
 
     socket.on('room-lock-status', (data) => {
       setIsRoomLocked(data.isLocked);
@@ -908,6 +976,17 @@ export default function App() {
         } else {
           setRoomCode(clean);
         }
+      } else if (!newCode && roomCodeRef.current) {
+        // User clicked browser Back to return to dashboard
+        if (socketRef.current) {
+          socketRef.current.emit('leave-room', { roomCode: roomCodeRef.current });
+        }
+        setRoomCode('');
+        roomCodeRef.current = '';
+        setItems([]);
+        setPeers([]);
+        setAccessStatus('none');
+        setWaitingRoomInfo(null);
       }
     };
     window.addEventListener('hashchange', handleHashChange);
@@ -1319,7 +1398,7 @@ export default function App() {
   );
 
   return (
-    <div className="min-h-screen flex flex-col justify-between selection:bg-cyan-500/30 relative">
+    <div className="min-h-screen flex flex-col selection:bg-cyan-500/30 relative">
       {/* External Dynamic Background Wallpaper */}
       <div className={`bg-wallpaper ${isDark ? 'bg-wallpaper-dark' : 'bg-wallpaper-light'}`} />
 
@@ -1343,41 +1422,16 @@ export default function App() {
         onToggleMute={handleToggleMute}
       />
 
-      {/* MAIN ADMIN PORTAL (SUPER ADMIN) */}
-      {activePortal === 'admin' && (
-        <AdminPortal
-          adminUser={adminUser}
-          onAdminLogin={handleAdminLogin}
-          onAdminLogout={handleAdminLogout}
-          addToast={addToast}
-          onLaunchRoom={(code) => {
-            setActivePortal('faculty');
-            activePortalRef.current = 'faculty';
-            sessionStorage.setItem('momo_active_portal', 'faculty');
-            const targetHash = `#portal=faculty&code=${code}`;
-            if (window.location.hash !== targetHash) {
-              isInternalHashChangeRef.current = true;
-              window.location.hash = targetHash;
-            }
-            setRoomCode(code);
-            roomCodeRef.current = code;
-            joinRoom(code, {
-              name: facultyUser ? facultyUser.name : 'Faculty Host',
-              role: 'faculty',
-              facultyId: facultyUser ? facultyUser.facultyId : null
-            });
-          }}
-        />
-      )}
-
-      {/* FACULTY PORTAL (SEMI-ADMIN) */}
-      {activePortal === 'faculty' && (
-        <FacultyPortal
-          facultyUser={facultyUser}
-          onFacultyLogin={handleFacultyLogin}
-          onFacultyLogout={handleFacultyLogout}
-          onLaunchClassroom={(code) => {
-            if (code) {
+      {/* Portal Main Content Area: Placed directly below the header with clean spacing */}
+      <main className="flex-1 w-full flex flex-col">
+        {/* MAIN ADMIN PORTAL (SUPER ADMIN) */}
+        {activePortal === 'admin' && (
+          <AdminPortal
+            adminUser={adminUser}
+            onAdminLogin={handleAdminLogin}
+            onAdminLogout={handleAdminLogout}
+            addToast={addToast}
+            onLaunchRoom={(code) => {
               setActivePortal('faculty');
               activePortalRef.current = 'faculty';
               sessionStorage.setItem('momo_active_portal', 'faculty');
@@ -1389,81 +1443,112 @@ export default function App() {
               setRoomCode(code);
               roomCodeRef.current = code;
               joinRoom(code, {
-                name: facultyUser.name,
-                email: facultyUser.email,
+                name: facultyUser ? facultyUser.name : 'Faculty Host',
                 role: 'faculty',
-                facultyId: facultyUser.facultyId,
-                rollNumber: facultyUser.facultyId
+                facultyId: facultyUser ? facultyUser.facultyId : null
               });
-            } else {
+            }}
+          />
+        )}
+
+        {/* FACULTY PORTAL (SEMI-ADMIN) */}
+        {activePortal === 'faculty' && (
+          <FacultyPortal
+            facultyUser={facultyUser}
+            onFacultyLogin={handleFacultyLogin}
+            onFacultyLogout={handleFacultyLogout}
+            refreshTrigger={facultyRoomsRefreshTrigger}
+            onLaunchClassroom={(code) => {
+              if (code) {
+                setActivePortal('faculty');
+                activePortalRef.current = 'faculty';
+                sessionStorage.setItem('momo_active_portal', 'faculty');
+                const targetHash = `#portal=faculty&code=${code}`;
+                if (window.location.hash !== targetHash) {
+                  isInternalHashChangeRef.current = true;
+                  window.location.hash = targetHash;
+                }
+                setRoomCode(code);
+                roomCodeRef.current = code;
+                joinRoom(code, {
+                  name: facultyUser.name,
+                  email: facultyUser.email,
+                  role: 'faculty',
+                  facultyId: facultyUser.facultyId,
+                  rollNumber: facultyUser.facultyId
+                });
+              } else {
+                if (socketRef.current && roomCodeRef.current) {
+                  socketRef.current.emit('leave-room', { roomCode: roomCodeRef.current });
+                }
+                setRoomCode('');
+                roomCodeRef.current = '';
+                isInternalHashChangeRef.current = true;
+                window.history.replaceState(null, '', '#portal=faculty');
+                setFacultyRoomsRefreshTrigger(prev => prev + 1);
+              }
+            }}
+            onViewRoomAttendance={handleViewRoomAttendance}
+            currentRoomCode={roomCode}
+            isHost={isHost}
+            pendingRequestsCount={pendingRequests.length}
+            onOpenRequestsModal={() => setIsRequestModalOpen(true)}
+            onOpenAttendanceModal={() => setIsAttendanceModalOpen(true)}
+            isRoomLocked={isRoomLocked}
+            onToggleLockRoom={handleToggleLockRoom}
+            addToast={addToast}
+          >
+            {renderClassroomWorkspace()}
+          </FacultyPortal>
+        )}
+
+        {/* STUDENT PORTAL */}
+        {activePortal === 'student' && (
+          <StudentPortal
+            roomCode={roomCode}
+            userName={userName}
+            userRollNumber={userRollNumber}
+            userEmail={userEmail}
+            userMobile={userMobile}
+            onJoinRoom={(details) => {
+              setUserName(details.peerName);
+              setUserRollNumber(details.rollNumber);
+              setUserEmail(details.email);
+              setUserMobile(details.mobile);
+              localStorage.setItem('momo_username', details.peerName);
+              localStorage.setItem('momo_roll_number', details.rollNumber);
+              if (details.email) localStorage.setItem('momo_email', details.email);
+              if (details.mobile) localStorage.setItem('momo_mobile', details.mobile);
+
+              joinRoom(details.roomCode, {
+                name: details.peerName,
+                rollNumber: details.rollNumber,
+                email: details.email,
+                mobile: details.mobile,
+                role: 'student'
+              });
+            }}
+            onLeaveRoom={() => {
               if (socketRef.current && roomCodeRef.current) {
                 socketRef.current.emit('leave-room', { roomCode: roomCodeRef.current });
               }
               setRoomCode('');
               roomCodeRef.current = '';
+              setAccessStatus('none');
+              setWaitingRoomInfo(null);
+              setItems([]);
+              setPeers([]);
               isInternalHashChangeRef.current = true;
-              window.location.hash = '#portal=faculty';
-            }
-          }}
-          onViewRoomAttendance={handleViewRoomAttendance}
-          currentRoomCode={roomCode}
-          isHost={isHost}
-          pendingRequestsCount={pendingRequests.length}
-          onOpenRequestsModal={() => setIsRequestModalOpen(true)}
-          onOpenAttendanceModal={() => setIsAttendanceModalOpen(true)}
-          isRoomLocked={isRoomLocked}
-          onToggleLockRoom={handleToggleLockRoom}
-          addToast={addToast}
-        >
-          {renderClassroomWorkspace()}
-        </FacultyPortal>
-      )}
-
-      {/* STUDENT PORTAL */}
-      {activePortal === 'student' && (
-        <StudentPortal
-          roomCode={roomCode}
-          userName={userName}
-          userRollNumber={userRollNumber}
-          userEmail={userEmail}
-          userMobile={userMobile}
-          onJoinRoom={(details) => {
-            setUserName(details.peerName);
-            setUserRollNumber(details.rollNumber);
-            setUserEmail(details.email);
-            setUserMobile(details.mobile);
-            localStorage.setItem('momo_username', details.peerName);
-            localStorage.setItem('momo_roll_number', details.rollNumber);
-            if (details.email) localStorage.setItem('momo_email', details.email);
-            if (details.mobile) localStorage.setItem('momo_mobile', details.mobile);
-
-            joinRoom(details.roomCode, {
-              name: details.peerName,
-              rollNumber: details.rollNumber,
-              email: details.email,
-              mobile: details.mobile,
-              role: 'student'
-            });
-          }}
-          onLeaveRoom={() => {
-            if (socketRef.current && roomCodeRef.current) {
-              socketRef.current.emit('leave-room', { roomCode: roomCodeRef.current });
-            }
-            setRoomCode('');
-            roomCodeRef.current = '';
-            setAccessStatus('none');
-            setWaitingRoomInfo(null);
-            setItems([]);
-            setPeers([]);
-            window.location.hash = '#portal=student';
-          }}
-          isConnected={isConnected}
-          isAdmitted={accessStatus === 'admitted'}
-          addToast={addToast}
-        >
-          {renderClassroomWorkspace()}
-        </StudentPortal>
-      )}
+              window.history.replaceState(null, '', '#portal=student');
+            }}
+            isConnected={isConnected}
+            isAdmitted={accessStatus === 'admitted'}
+            addToast={addToast}
+          >
+            {renderClassroomWorkspace()}
+          </StudentPortal>
+        )}
+      </main>
 
       {/* Modals */}
       <CodeModal

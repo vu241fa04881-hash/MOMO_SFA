@@ -520,7 +520,7 @@ export default function AdminPortal({
   // IF NOT AUTHENTICATED: SHOW ADMIN LOGIN CARD
   if (!adminUser) {
     return (
-      <div className="min-h-[75vh] flex items-center justify-center p-4 sm:p-6">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 animate-in fade-in">
         <div className="relative w-full max-w-md rounded-3xl glass-panel p-6 sm:p-8 shadow-2xl border border-amber-500/30 flex flex-col gap-6 ring-1 ring-amber-500/20">
           {/* Header */}
           <div className="flex flex-col items-center text-center gap-2">
@@ -589,7 +589,7 @@ export default function AdminPortal({
 
   // AUTHENTICATED MAIN ADMIN DASHBOARD
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 flex flex-col gap-6 animate-in fade-in">
+    <div className="w-full max-w-7xl mx-auto px-4 py-4 sm:py-6 flex flex-col gap-6 animate-in fade-in">
       {/* Top Banner & Stats Overview */}
       <div className="rounded-3xl glass-panel p-6 border border-white/10 shadow-xl flex flex-col gap-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">

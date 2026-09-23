@@ -1486,10 +1486,17 @@ app.delete('/api/admin/rooms/:roomCode', (req, res) => {
     saveFacultiesToFile();
   }
 
-  // 2. Disconnect active peers in the room
-  io.to(normalized).emit('kicked-from-room', {
+  // 2. Disconnect active peers in the room and notify portals
+  io.to(normalized).emit('room-deleted', {
+    roomCode: normalized,
     message: 'This classroom was deleted by the System Administrator.'
   });
+  io.to(normalized).emit('kicked-from-room', {
+    reason: 'room-deleted',
+    message: 'This classroom was deleted by the System Administrator.'
+  });
+  // Broadcast to all portals so faculty dashboards immediately refresh their room lists
+  io.emit('faculty-rooms-updated', { roomCode: normalized, action: 'deleted' });
 
   // 3. Remove uploaded files associated with this room
   for (const [fileId, fileMeta] of filesRegistry.entries()) {
@@ -2182,13 +2189,39 @@ io.on('connection', (socket) => {
     if (!roomCode) return;
     const cleanCode = normalizeCode(roomCode);
 
-    // Check if room already exists or is an authorized faculty classroom
-    const isExistingRoom = rooms.has(cleanCode) || Array.from(facultyStore.values()).some(fac =>
-      fac.assignedRooms && fac.assignedRooms.some(c => normalizeCode(c) === cleanCode)
+    // Determine authorization and role
+    const cleanFacId = facultyId ? facultyId.trim().toUpperCase() : null;
+    const isFacultyUser = Boolean(cleanFacId && facultyStore.has(cleanFacId));
+    const facultyAccount = isFacultyUser ? facultyStore.get(cleanFacId) : null;
+    const isAssignedToThisFaculty = Boolean(
+      facultyAccount &&
+      Array.isArray(facultyAccount.assignedRooms) &&
+      facultyAccount.assignedRooms.some(c => normalizeCode(c) === cleanCode)
     );
+    const doesRoomExist = rooms.has(cleanCode);
+
+    // If room does not exist and is not assigned to this faculty, reject joining and NEVER self-create
+    if (!doesRoomExist && !isAssignedToThisFaculty) {
+      socket.emit('room-not-found', {
+        roomCode: cleanCode,
+        message: (role === 'faculty' || isFacultyUser)
+          ? 'This classroom was deleted or is not assigned to your faculty account.'
+          : 'Classroom not found. Please verify your room code.'
+      });
+      return;
+    }
+
+    // Faculty members cannot host rooms assigned to another faculty or unallotted rooms
+    if (isFacultyUser && !isAssignedToThisFaculty) {
+      socket.emit('room-not-found', {
+        roomCode: cleanCode,
+        message: 'This classroom is not assigned to your faculty account.'
+      });
+      return;
+    }
 
     // Students cannot create rooms; they are only allowed to join existing classrooms
-    if (!isExistingRoom && role === 'student') {
+    if (!doesRoomExist && role === 'student') {
       socket.emit('access-denied', {
         roomCode: cleanCode,
         message: 'Classroom not found. Students can only join existing classrooms created by faculty. Please verify your room code.'
@@ -2229,11 +2262,6 @@ io.on('connection', (socket) => {
       isWaitingInRoom = null;
     }
 
-    // Determine authorization and role
-    const cleanFacId = facultyId ? facultyId.trim().toUpperCase() : null;
-    const isFacultyUser = Boolean(cleanFacId && facultyStore.has(cleanFacId));
-    const facultyAccount = isFacultyUser ? facultyStore.get(cleanFacId) : null;
-
     // Faculty Semi-Admin Authorization
     const isHost = isFacultyUser ||
       (!room.hostClientId && role === 'faculty') ||
@@ -2246,9 +2274,7 @@ io.on('connection', (socket) => {
       room.hostName = facultyAccount.name;
       room.hostEmail = facultyAccount.email;
       room.admittedClients.add(room.hostClientId);
-      if (!facultyAccount.assignedRooms.includes(room.code)) {
-        facultyAccount.assignedRooms.push(room.code);
-      }
+      // NOTE: Faculty cannot self-assign rooms! Rooms must be assigned by Super Admin.
     } else if (isHost && !isFacultyUser) {
       room.hostClientId = senderId || socket.id;
       room.hostSocketId = socket.id;
@@ -3023,78 +3049,10 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Request new session / reset room (Restricted: Students cannot create rooms)
-  socket.on('request-new-session', ({ peerName, email, mobile, senderId, role = 'student', facultyId = null } = {}) => {
-    const cleanFacId = facultyId ? facultyId.trim().toUpperCase() : null;
-    const isFacultyUser = Boolean(cleanFacId && facultyStore.has(cleanFacId));
-    if (!isFacultyUser && role === 'student') {
-      socket.emit('access-denied', {
-        message: 'Students cannot create rooms. Room creation is restricted to Faculty and Administrators. Please join an existing classroom.'
-      });
-      return;
-    }
-
-    // Leave previous room if changing
-    if (currentRoomCode) {
-      socket.leave(currentRoomCode);
-      const prevRoom = rooms.get(currentRoomCode);
-      if (prevRoom) {
-        recordExit(prevRoom, socket.id);
-        notifyAdminAttendance(prevRoom);
-        prevRoom.peers.delete(socket.id);
-        io.to(currentRoomCode).emit('peer-left', {
-          socketId: socket.id,
-          peers: Array.from(prevRoom.peers.values()),
-          peerCount: prevRoom.peers.size
-        });
-      }
-    }
-
-    let newCode = generate6DigitCode();
-    while (rooms.has(normalizeCode(newCode))) {
-      newCode = generate6DigitCode();
-    }
-    const newRoom = getOrCreateRoom(newCode, senderId, peerName);
-    newRoom.hostSocketId = socket.id;
-    if (email) newRoom.hostEmail = email;
-    if (mobile) newRoom.hostMobile = mobile;
-
-    const normalized = normalizeCode(newRoom.code);
-    currentRoomCode = normalized;
-    socket.join(normalized);
-
-    const peerInfo = {
-      socketId: socket.id,
-      peerName: peerName || 'Faculty Host',
-      email: email || '',
-      mobile: mobile || '',
-      senderId: senderId || socket.id,
-      joinedAt: Date.now(),
-      isHost: true
-    };
-    newRoom.peers.set(socket.id, peerInfo);
-
-    recordAttendance(newRoom, {
-      senderId: senderId || socket.id,
-      socketId: socket.id,
-      name: peerName || 'Faculty Host',
-      email: email || 'N/A',
-      mobile: mobile || 'N/A',
-      isHost: true
-    });
-
-    socket.emit('session-created', {
-      code: newRoom.code,
-      slug: newRoom.slug,
-      formattedCode: `${newRoom.code.slice(0, 3)} ${newRoom.code.slice(3)}`,
-      items: newRoom.items,
-      peers: Array.from(newRoom.peers.values()),
-      peerCount: newRoom.peers.size,
-      ttlMinutes: newRoom.ttlMinutes || 15,
-      createdAt: newRoom.createdAt,
-      isHost: true,
-      hostName: newRoom.hostName || 'Faculty Host',
-      attendance: getStudentAttendanceList(newRoom)
+  // Request new session / reset room (Restricted: Classrooms are managed by Admin)
+  socket.on('request-new-session', () => {
+    socket.emit('access-denied', {
+      message: 'Classroom spaces are created and assigned exclusively by the Main System Administrator.'
     });
   });
 
